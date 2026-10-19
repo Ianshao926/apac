@@ -5,7 +5,9 @@ import { cleanText, fetchImages, graphChatMessages, hasFiles, isMentioned, sendT
 import { activeChats, deactivateChat, getChat, messagesBetween, radarBrands, radarItems, recentMessages, recentSummaries, saveMessage, saveMessages, saveSummary, searchMessages, upsertChat } from './db';
 import { answer, summarize, triage } from './brain';
 import { fetchPage, ingest, listDocs, removeDoc, search } from './kb';
-import { monthSpend, recordUsage, spendLine, type Spend } from './budget';
+import { monthSpend, recordUsage, spendLine } from './budget';
+// @ts-ignore .png 由 wrangler rules 以 Data(ArrayBuffer)匯入
+import LOGO from '../assets/logo-512.png';
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const page = (title: string, body: string) => new Response(`<!doctype html><html lang="zh-Hant-TW"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;max-width:40em;margin:60px auto;padding:0 20px;line-height:1.9;color:#111}h1{font-weight:600;font-size:22px}</style><body><h1>${title}</h1>${body}</body></html>`, { headers: { 'content-type': 'text/html; charset=utf-8' } });
@@ -182,7 +184,8 @@ export default {
       return new Response(null, { status: 200 });
     }
 
-    if (path === '/') return page(env.BOT_NAME, `<p>${env.ORG_NAME}的 AI 同事，住在 Teams 裡。</p><p><a href="${env.RADAR_URL}">亞太競品雷達</a></p>`);
+    if (path === '/') return page(env.BOT_NAME, `<p><img src="/logo.png" width="128" height="128" alt="亞太寶寶" style="display:block;margin:0 0 20px"></p><p>${env.ORG_NAME}的 AI 同事，住在 Teams 裡。</p><p><a href="${env.RADAR_URL}">亞太競品雷達</a></p>`);
+    if (path === '/logo.png') return new Response(LOGO, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800' } });
     if (path === '/privacy') return page('隱私說明', `<p>亞太寶寶只在被安裝的 Teams 對話裡運作。它會保存該對話的訊息文字、每日大綱，以及同事主動要求「記住」的資料，用來回答問題與整理大綱；資料存放在${env.ORG_NAME}自己的 Cloudflare 帳號。回答時會把相關內容送到 Anthropic 的 API 處理，依其商用條款不會被用於訓練模型。圖片只在回答當下使用，不保存。要刪除資料請聯絡管理者。</p>`);
     if (path === '/terms') return page('使用條款', `<p>亞太寶寶是${env.ORG_NAME}內部使用的工具，僅供部門同事於工作用途使用。回答由 AI 產生，可能有誤，重要決策請自行確認來源。</p>`);
 

@@ -13,6 +13,9 @@
     { "binding": "RADAR", "database_name": "apac-radar", "database_id": "31b3db0f-a4ba-4ffa-9bfc-1b5b546e6a22" }
   ],
   "ai": { "binding": "AI" },
+  "rules": [
+    { "type": "Data", "globs": ["**/*.png"], "fallthrough": true }
+  ],
   "vectorize": [
     { "binding": "VEC", "index_name": "apac-bot-kb" }
   ],
