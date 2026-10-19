@@ -16,7 +16,7 @@
     { "binding": "IMG", "id": "5db74e2821cc4692b3cb4af06ce42058" }
   ],
   "rules": [
-    { "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }
+    { "type": "Data", "globs": ["**/*.ttf", "**/*.png"], "fallthrough": true }
   ],
   "vars": {
     "SITE_NAME": "亞太競品雷達",

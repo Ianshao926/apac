@@ -5,6 +5,7 @@ import { researchBrand } from './research';
 import { renderArchive, renderBrand, renderBrands, renderEmpty, renderIssueHome, renderIssueStories, renderStories, renderStory, type Site } from './render';
 import { renderBanner } from './banner';
 import { buildCard, postToTeams } from './card';
+import { LOGOS } from './logos';
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const html = (s: string, status = 200) => new Response(s, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
@@ -114,6 +115,11 @@ export default {
       const { value, metadata } = await env.IMG.getWithMetadata<{ ct: string }>(key, 'arrayBuffer');
       if (!value) return new Response('not found', { status: 404 });
       return new Response(value, { headers: { 'content-type': metadata?.ct ?? 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable' } });
+    }
+    if ((m = /^\/logo\/([a-z0-9-]+)\.png$/.exec(path))) {
+      const png = LOGOS[m[1]];
+      if (!png) return new Response('not found', { status: 404 });
+      return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800' } });
     }
     if ((m = /^\/banner\/(\d{4}-W\d{2})\.png$/.exec(path))) {
       const issue = await getIssue(env, m[1]);

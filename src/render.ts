@@ -1,5 +1,6 @@
 // 網站版面 v4,版型參考 Kinfolk:白底黑字、襯線大標、13px 無襯線標籤、滿版圖、灰綠色帶、黑底頁尾。
 // 頁面:首頁與每期首頁(雜誌式)、每期全部動態(四欄圖卡)、單則動態、全部期數、全部動態與分類、品牌一覽、單一品牌。
+import { LOGO_IDS } from './logo-ids';
 import { CATEGORIES, CATEGORY_EN, CATEGORY_ZH, type Brand, type BrandStat, type IssueBundle, type IssueSummary, type Item, type ItemImage, type ItemSource, type ItemsBundle } from './types';
 
 export interface Site { siteName: string; orgName: string; link: (p: string) => string; admin: boolean }
@@ -77,8 +78,10 @@ a:focus-visible,button:focus-visible,select:focus-visible{outline:1px solid curr
 .sh h2{font-family:var(--serif);font-size:clamp(26px,2.3vw,32px);line-height:1.2}.sh a,.sh span{font-family:var(--sans);font-size:13px;white-space:nowrap}.sh a:hover{color:var(--mute)}
 .row{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 4*18px)/4.55);gap:18px;overflow-x:auto;padding:0 var(--g);scroll-padding-inline:var(--g);scroll-snap-type:x mandatory;scrollbar-width:none}.row::-webkit-scrollbar{display:none}.row>*{scroll-snap-align:start}
 .card{display:block}.card .im{position:relative;aspect-ratio:3/4;background:var(--ph);overflow:hidden}.card .im img{width:100%;height:100%;object-fit:cover;transition:opacity .25s}.card:hover .im img{opacity:.88}
-.card .lb{margin-top:8px}.card h3{font-family:var(--sans);font-size:15px;line-height:1.6;font-weight:500;margin-top:10px}.card:hover h3{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.card .lb{margin-top:8px;display:flex;align-items:center;gap:8px}.card h3{font-family:var(--sans);font-size:15px;line-height:1.6;font-weight:500;margin-top:10px}.card:hover h3{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
 .card .d{font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--mute);margin-top:4px}
+.mk,.mkM,.mkL{flex:none;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--hair)}.mk{width:20px;height:20px}.mkM{width:52px;height:52px}.mkL{display:block;width:112px;height:112px;margin:0 auto 32px}
+.mk.t,.mkM.t,.mkL.t{display:grid;place-items:center;background:#000;color:#fff;box-shadow:none;font-family:var(--serif);line-height:1}.mk.t{font-size:12px}.mkM.t{font-size:28px}.mkL.t{font-size:60px}
 .mono{position:absolute;inset:0;display:grid;place-items:center;background:#000;color:#fff;font-family:var(--serif);font-size:clamp(120px,13vw,220px);line-height:1}
 .feat{text-align:center;padding:clamp(104px,10vw,170px) var(--g) 0}
 .feat .k{display:block;font-family:var(--serif);font-size:clamp(28px,3.1vw,46px);line-height:1.08;text-transform:uppercase;margin-bottom:14px}
@@ -91,7 +94,7 @@ a:focus-visible,button:focus-visible,select:focus-visible{outline:1px solid curr
 .band .more{display:inline-block;margin-top:14px;font-family:var(--sans);font-size:13px;text-decoration:underline;text-underline-offset:3px}
 .band .none{font-family:var(--sans);font-size:14px;color:var(--mute);padding-top:12px;border-top:1px solid var(--ink)}
 .wrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) 110px;gap:24px;align-items:center;margin:0 var(--g);padding:20px 0;border-bottom:1px solid var(--ink)}
-.wrow .n{font-family:var(--serif);font-size:clamp(22px,2.2vw,32px);line-height:1.1;text-transform:uppercase}.wrow .n small{display:block;margin-top:6px;font-family:var(--sans);font-size:13px;text-transform:none;color:var(--mute)}
+.wrow .n{display:flex;align-items:center;gap:18px;font-family:var(--serif);font-size:clamp(22px,2.2vw,32px);line-height:1.1;text-transform:uppercase}.wrow .n small{display:block;margin-top:6px;font-family:var(--sans);font-size:13px;text-transform:none;color:var(--mute)}
 a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 .ticks{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}.ticks i{height:10px;box-shadow:inset 0 0 0 1px var(--ink)}.ticks i.on{background:var(--ink)}
 .quiet{margin:40px var(--g) 0;font-family:var(--serif);font-size:clamp(20px,1.9vw,26px);line-height:1.5}.quiet .lb{display:block;margin-bottom:10px;color:var(--mute)}
@@ -129,7 +132,7 @@ a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 .credit{padding:8px var(--g) 0;width:50%}
 .dek{padding:72px var(--g) 0;max-width:calc(30em + 2*var(--g));font-family:var(--zh);font-size:clamp(22px,2.3vw,32px);line-height:1.5}
 .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;padding:88px var(--g) 0;font-family:var(--sans);font-size:15px;line-height:20px}
-.meta>div>b{display:block;font-weight:400;text-transform:uppercase;letter-spacing:.01em}.meta span{display:block;color:var(--mute);margin-top:2px}
+.meta>div>b{display:flex;align-items:center;gap:8px;font-weight:400;text-transform:uppercase;letter-spacing:.01em}.meta span{display:block;color:var(--mute);margin-top:2px}
 .body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:104px var(--g) 0;align-items:start}
 .body .side figure{margin:0 0 48px;width:min(330px,100%)}.body .side figure a{display:block;background:var(--ph)}.body .side figcaption{margin-top:8px}
 .txt{max-width:34em;font-family:var(--zh);font-size:18px;line-height:2}.txt>p{text-indent:2em}.txt>p+p{margin-top:1em}
@@ -182,6 +185,13 @@ const storyHref = (c: Ctx, it: Item) => c.s.link(`/s/${it.id}`);
 const imgSrc = (im: ItemImage) => `/img/${im.kv_key.replace(/^img\//, '')}`;
 const initial = (c: Ctx, it: Item) => (enName(c.brands.get(it.brand_id), it.brand_id).trim()[0] ?? '·').toUpperCase();
 
+/** 品牌標誌:有 logo 用 logo,沒有就用黑底首字母方塊 */
+function mark(id: string, b: Brand | undefined, cls: 'mk' | 'mkM' | 'mkL') {
+  const px = cls === 'mk' ? 20 : cls === 'mkM' ? 52 : 112;
+  if (LOGO_IDS.has(id)) return `<img class="${cls}" src="/logo/${esc(id)}.png" alt="" width="${px}" height="${px}" loading="lazy" decoding="async">`;
+  return `<span class="${cls} t" aria-hidden="true">${esc((enName(b, id).trim()[0] ?? '·').toUpperCase())}</span>`;
+}
+
 function picture(c: Ctx, it: Item, eager = false) {
   const im = c.images[it.id]?.[0];
   return im ? `<img src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
@@ -192,7 +202,7 @@ function card(c: Ctx, it: Item, mode: 'issue' | 'cross') {
   const b = c.brands.get(it.brand_id);
   const label = mode === 'issue' ? `${CATEGORY_EN[it.category]}, ${enName(b, it.brand_id)}` : `${CATEGORY_EN[it.category]}, ${wlabel(it.week)}`;
   const dek = mode === 'issue' ? [it.market, itemDates(it)].filter(Boolean).join(' · ') : [b?.name_zh ?? it.brand_id, it.market].filter(Boolean).join(' · ');
-  return `<a class="card" href="${esc(storyHref(c, it))}"><div class="im">${picture(c, it)}</div><p class="lb">${esc(label)}</p><h3>${esc(it.title)}</h3><p class="d">${esc(dek)}</p></a>`;
+  return `<a class="card" href="${esc(storyHref(c, it))}"><div class="im">${picture(c, it)}</div><p class="lb">${mark(it.brand_id, b, 'mk')}<span>${esc(label)}</span></p><h3>${esc(it.title)}</h3><p class="d">${esc(dek)}</p></a>`;
 }
 
 function coverBlock(issue: { week: string; no: number | null; range_start: string; range_end: string }, key: string | null, href: string, tag = 'a') {
@@ -253,7 +263,7 @@ ${coverBlock(issue, coverKey, '', 'div')}
   const rows = b.brands.slice().sort((x, y) => (+thisWeek.has(y.id) - +thisWeek.has(x.id)) || ((b.activity[y.id]?.length ?? 0) - (b.activity[x.id]?.length ?? 0)) || x.sort - y.sort)
     .filter(br => thisWeek.has(br.id)).map(br => {
       const weeks = new Set(b.activity[br.id] ?? []); const n = items.filter(i => i.brand_id === br.id).length; const mk: string[] = JSON.parse(br.markets);
-      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${esc(enName(br))}<small>${esc(br.name_zh)} · ${esc(mk.join(' · '))}</small></span><span class="ticks" title="近八週有動態的週">${b.weeks8.map(w => `<i${weeks.has(w) ? ' class="on"' : ''}></i>`).join('')}</span><span class="lb c">${n} ${n === 1 ? 'story' : 'stories'}</span></a>`;
+      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${mark(br.id, br, 'mkM')}<span>${esc(enName(br))}<small>${esc(br.name_zh)} · ${esc(mk.join(' · '))}</small></span></span><span class="ticks" title="近八週有動態的週">${b.weeks8.map(w => `<i${weeks.has(w) ? ' class="on"' : ''}></i>`).join('')}</span><span class="lb c">${n} ${n === 1 ? 'story' : 'stories'}</span></a>`;
     }).join('');
   const watch = `<section class="sect"><div class="sh"><h2>Brand Watch</h2><span>Last eight weeks</span></div>${rows}
 <p class="quiet"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ') || '沒有品牌安靜。'}</p></section>`;
@@ -328,7 +338,7 @@ export function renderBrands(brands: Brand[], stats: BrandStat[], s: Site): stri
     if (!list.length) return '';
     return `<section class="sect"><div class="sh"><h2>${en}</h2><span>${zh}</span></div>${list.map(br => {
       const x = st.get(br.id); const mk: string[] = JSON.parse(br.markets);
-      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${esc(enName(br))}<small>${esc(br.name_zh)}</small></span><span class="lb">${esc(mk.join(' · '))}</span><span class="lb c">${x ? `${x.items} ${x.items === 1 ? 'story' : 'stories'}<br>Latest ${esc(wlabel(x.last_week ?? ''))}` : 'No stories yet'}</span></a>`;
+      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${mark(br.id, br, 'mkM')}<span>${esc(enName(br))}<small>${esc(br.name_zh)}</small></span></span><span class="lb">${esc(mk.join(' · '))}</span><span class="lb c">${x ? `${x.items} ${x.items === 1 ? 'story' : 'stories'}<br>Latest ${esc(wlabel(x.last_week ?? ''))}` : 'No stories yet'}</span></a>`;
     }).join('')}</section>`;
   }).join('');
   const body = `<section class="phd"><h1>Brands</h1><p class="p">我們每週追蹤的 ${brands.length} 個茶飲品牌。點品牌可以看它歷來的所有動態。</p></section>${sections}`;
@@ -342,7 +352,7 @@ export function renderBrand(br: Brand, bundle: ItemsBundle, brands: Brand[], s: 
   const mk: string[] = JSON.parse(br.markets);
   const list = cat ? bundle.items.filter(i => i.category === cat) : bundle.items;
   const tier = TIERS.find(t => t[0] === br.tier);
-  const body = `<section class="phd"><h1>${esc(enName(br))}</h1><p class="zh">${esc(br.name_zh)}</p>
+  const body = `<section class="phd">${mark(br.id, br, 'mkL')}<h1>${esc(enName(br))}</h1><p class="zh">${esc(br.name_zh)}</p>
 <p class="lb">${esc(mk.join(' · '))}${tier ? ' · ' + tier[1] : ''}</p><p class="p">${esc(br.focus)}</p>
 ${filterLine({ all: L('/b/' + br.id), cat: x => L(`/b/${br.id}?c=${x}`) }, cat)}</section>
 <div class="hr"></div>
@@ -379,7 +389,7 @@ ${first ? `<p class="lb credit">${esc(first.credit)}</p>` : ''}
 <p class="dek">${esc(it.title)}</p>
 <div class="meta"><div><b>${esc(wlabel(it.week))}, Issue ${esc(pad2(b.issue.no))}</b><span>${esc(rangeShort(b.issue.range_start, b.issue.range_end))}</span></div>
 <div><b><a href="${esc(L('/c/' + it.category))}">${CATEGORY_EN[it.category]}</a></b><span>${CATEGORY_ZH[it.category]}</span></div>
-<div><b><a href="${esc(L('/b/' + it.brand_id))}">${esc(name)}</a></b><span>${esc(br?.name_zh ?? '')} · ${esc(it.market)}</span></div>
+<div><b>${mark(it.brand_id, br, 'mk')}<a href="${esc(L('/b/' + it.brand_id))}">${esc(name)}</a></b><span>${esc(br?.name_zh ?? '')} · ${esc(it.market)}</span></div>
 <div><b>${srcs.length} ${srcs.length === 1 ? 'Source' : 'Sources'}</b><span>${verified ? '已佐證' : '單一來源'}</span></div></div>
 <div class="body"><div class="side">${imgs.slice(1).map(im => `<figure><a href="${esc(imgSrc(im))}" target="_blank" rel="noopener"><img src="${esc(imgSrc(im))}" alt="" loading="lazy"></a><figcaption class="lb">${esc(im.credit)}</figcaption></figure>`).join('')}</div>
 <div class="txt"><p>${esc(it.summary)}</p>
