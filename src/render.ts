@@ -1,146 +1,395 @@
-// 報紙版週報(v3 設計):純白紙面、W 週數脊椎、邊欄後設、品牌活動度刻度圖。預設淺色,右上角可切深色。
-import { CATEGORY_ZH, type Brand, type IssueBundle, type Item } from './types';
-import { md, weekday } from './week';
+// 網站版面 v4,版型參考 Kinfolk:白底黑字、襯線大標、13px 無襯線標籤、滿版圖、灰綠色帶、黑底頁尾。
+// 頁面:首頁與每期首頁(雜誌式)、每期全部動態(四欄圖卡)、單則動態、全部期數、全部動態與分類、品牌一覽、單一品牌。
+import { CATEGORIES, CATEGORY_EN, CATEGORY_ZH, type Brand, type BrandStat, type IssueBundle, type IssueSummary, type Item, type ItemImage, type ItemSource, type ItemsBundle } from './types';
 
-const esc = (s: string | null | undefined) => (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export interface Site { siteName: string; orgName: string; link: (p: string) => string; admin: boolean }
+type Cat = Item['category'];
 
+// ---------- 小工具 ----------
+const esc = (s: string | number | null | undefined) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const safeUrl = (u: string | null | undefined) => (u && /^https?:\/\//i.test(u) ? u : '');
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function parts(s: string | null | undefined) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s ?? ''); return m ? { y: +m[1], m: +m[2], d: +m[3] } : null; }
+function dShort(s: string | null | undefined) { const p = parts(s); return p ? `${MON[p.m - 1]} ${p.d}` : ''; }
+function rangeShort(a: string, b: string) { const x = parts(a), y = parts(b); if (!x || !y) return ''; return x.m === y.m ? `${MON[x.m - 1]} ${x.d} – ${y.d}` : `${MON[x.m - 1]} ${x.d} – ${MON[y.m - 1]} ${y.d}`; }
+function rangeLong(a: string, b: string) {
+  const x = parts(a), y = parts(b); if (!x || !y) return '';
+  if (x.y !== y.y) return `${MONTH[x.m - 1]} ${x.d}, ${x.y} – ${MONTH[y.m - 1]} ${y.d}, ${y.y}`;
+  return x.m === y.m ? `${MONTH[x.m - 1]} ${x.d} – ${y.d}, ${y.y}` : `${MONTH[x.m - 1]} ${x.d} – ${MONTH[y.m - 1]} ${y.d}, ${y.y}`;
+}
+const wnum = (w: string) => String(Number(w.slice(-2)));
+const wlabel = (w: string) => `Week ${wnum(w)}`;
+const pad2 = (n: number | null | undefined) => String(n ?? 1).padStart(2, '0');
+const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+const enName = (b: Brand | undefined, fallback = '') => (b ? (b.name_en || b.name_zh) : fallback);
+function itemDates(it: Item) {
+  if (it.date_start && it.date_end) return `${dShort(it.date_start)} – ${dShort(it.date_end)}`;
+  if (it.date_start) return `${dShort(it.date_start)} 起`;
+  if (it.date_end) return `至 ${dShort(it.date_end)}`;
+  return '';
+}
+
+/** 頭條:指定頭條優先,其次有圖、rank 低、較早寫入的(listIssues 的 SQL 用同一套規則) */
+export function pickLead(items: Item[], images: Record<string, ItemImage[]>): Item | undefined {
+  return items.find(i => i.is_lead) ?? items.slice().sort((a, c) => ((images[a.id]?.length ? 0 : 100) + a.rank) - ((images[c.id]?.length ? 0 : 100) + c.rank))[0];
+}
+
+// ---------- 樣式 ----------
 const CSS = `
-:root{--bg:#FFFFFF;--bg-2:#F3F3F1;--ink:#111417;--ink-2:#5B6168;--ink-3:#7B8188;--blue:#1F3D63;--brass:#8A5E1A;--rule:#E3E4E1;--rule-2:#C9CBC7;--photo:#ECECEA;--photo-line:#D6D7D3;
---sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;--serif:"Noto Serif TC","Songti TC","PMingLiU",serif;--latin:"Archivo","Helvetica Neue",Arial,sans-serif;color-scheme:light}
-:root[data-theme="dark"]{--bg:#0F1216;--bg-2:#161A20;--ink:#EDEEF0;--ink-2:#A6ABB3;--ink-3:#8A9099;--blue:#9DB8D6;--brass:#D1A862;--rule:#262B33;--rule-2:#39404A;--photo:#181D24;--photo-line:#2A313B;color-scheme:dark}
-*{box-sizing:border-box;min-width:0}html,body{overflow-x:clip}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:15.5px;line-height:1.9;-webkit-font-smoothing:antialiased;text-wrap:pretty;font-variant-numeric:tabular-nums;font-feature-settings:"palt"}
-p{margin:0}a{color:inherit;text-decoration-color:var(--blue);text-underline-offset:3px}a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.wrap{max-width:1200px;margin:0 auto;padding-block:0 64px;padding-inline:clamp(16px,4vw,56px)}
-.la{font-family:var(--latin);font-variant-numeric:lining-nums tabular-nums}.cap{font-family:var(--latin);font-size:12px;font-weight:500;letter-spacing:.02em;color:var(--ink-2)}
-.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-block:14px;border-bottom:1px solid var(--ink);font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.02em}
-.topbar .mark{display:inline-flex;align-items:center;gap:10px}.topbar .mark svg{width:16px;height:16px;color:var(--ink)}
-.topbar .r{font-family:var(--latin);font-weight:500;color:var(--ink-2);display:flex;align-items:center;gap:16px}
-.tgl{width:28px;height:28px;padding:0;border:1px solid var(--rule-2);border-radius:50%;background:transparent;color:var(--ink);cursor:pointer;display:grid;place-items:center}.tgl svg{width:15px;height:15px;display:block}.tgl .moon{display:none}
-:root[data-theme="dark"] .tgl .sun{display:none}:root[data-theme="dark"] .tgl .moon{display:block}
-.draft{background:var(--brass);color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 8px;letter-spacing:.06em}
-.masthead{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 40px;align-items:end;padding-block:28px 24px;border-bottom:4px solid var(--ink)}
-.wk{font-family:var(--latin);font-stretch:62%;font-weight:900;font-size:clamp(120px,18vw,224px);line-height:.8;letter-spacing:-.04em;color:var(--blue);transform:translateY(.06em)}
-.mh h1{margin:0 0 10px;font-family:var(--sans);font-weight:900;font-size:clamp(34px,4.6vw,56px);letter-spacing:-.02em;line-height:1.05}
-.mh .line{display:flex;flex-wrap:wrap;gap:4px 24px;font-family:var(--latin);font-size:14px;color:var(--ink-2);font-weight:500}.mh .line b{color:var(--ink);font-weight:700}.mh .line .zh{font-family:var(--sans);font-weight:500}
-.pulse{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 40px;padding-block:20px 24px;border-bottom:1px solid var(--rule)}
-.pulse>div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;align-items:baseline}
-.pulse .n{font-family:var(--latin);font-stretch:75%;font-weight:800;font-size:44px;line-height:1;letter-spacing:-.03em}.pulse .t{font-family:var(--sans);font-weight:700;font-size:14px}
-.pulse .ticks{grid-column:2;display:flex;gap:3px;margin-top:8px;height:10px}.pulse .ticks i{flex:1;background:var(--rule-2)}.pulse .ticks i.on{background:var(--blue)}.pulse .cap{grid-column:2;margin-top:6px}
-.entry{display:grid;grid-template-columns:132px minmax(0,1fr);gap:0 32px;padding-block:32px;border-top:1px solid var(--rule);scroll-margin-top:24px}
-.rail{display:flex;flex-direction:column;gap:6px;font-family:var(--latin);font-size:12.5px;color:var(--ink-2);line-height:1.5;padding-top:6px}
-.rail .d{font-size:15px;font-weight:700;color:var(--ink);letter-spacing:-.01em}.rail .zh{font-family:var(--sans);font-weight:500}
-.rail .src{margin-top:10px;padding-top:10px;border-top:1px solid var(--rule);font-size:12px}.rail .src b{display:block;font-weight:700;color:var(--blue)}.rail .src .one{color:var(--brass);font-weight:700}
-.brand{font-family:var(--sans);font-size:13.5px;font-weight:700;letter-spacing:.01em;margin-bottom:8px}.brand span{color:var(--ink-2);font-weight:500;margin-left:10px}
-.entry h3,.entry h2{margin:0 0 14px;font-family:var(--sans);font-weight:900;letter-spacing:-.02em;text-wrap:balance}.entry h3{font-size:22px;line-height:1.4}
-.entry .body{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:0 32px;align-items:start}.entry .body.noimg{grid-template-columns:minmax(0,1fr)}
-.entry p{max-width:38em}.entry p+p{margin-top:10px}
-.note{margin-top:16px;padding-left:16px;border-left:1px solid var(--ink);font-family:var(--sans);font-size:14px;line-height:1.75;color:var(--ink)}.note b{font-weight:700;margin-right:8px}
-.photo{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--photo);box-shadow:inset 0 0 0 1px var(--photo-line);display:grid;place-items:center;overflow:hidden}
-.photo img{width:100%;height:100%;object-fit:cover;display:block}
-.photo span{font-family:var(--latin);font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-align:center;padding:0 12px;line-height:1.6}
-.credit{font-family:var(--latin);font-size:11px;color:var(--ink-3);margin-top:6px;letter-spacing:.02em}
-.more{display:flex;gap:4px;margin-top:6px}.more a{display:block;width:28px;height:28px;background:var(--photo);box-shadow:inset 0 0 0 1px var(--photo-line);overflow:hidden}.more img{width:100%;height:100%;object-fit:cover;display:block}
-.lead{display:grid;grid-template-columns:132px minmax(0,1fr) minmax(0,460px);gap:0 32px;padding-block:40px 36px;border-bottom:1px solid var(--ink)}
-.lead .rail{padding-top:10px}.lead h2{font-size:clamp(30px,3.8vw,46px);line-height:1.25;margin:0 0 18px}
-.lead .stand{font-family:var(--sans);font-weight:500;font-size:18px;line-height:1.7;max-width:30em;margin-bottom:14px}.lead .photo{aspect-ratio:4/3}
-.sect{padding-top:44px}.sect .vt{display:flex;align-items:baseline;gap:16px;padding-bottom:14px;margin-bottom:8px;border-bottom:1px solid var(--ink)}
-.sect .vt i{display:block;width:28px;height:10px;background:var(--blue);align-self:center}.sect .vt span{font-family:var(--sans);font-weight:900;font-size:26px;letter-spacing:-.02em;line-height:1;color:var(--ink)}
-.sect .vt small{margin-left:auto;font-family:var(--latin);font-weight:600;font-size:13px;color:var(--ink-2)}.sect .list .entry:first-of-type{padding-top:24px;border-top:0}
-.empty{font-family:var(--sans);color:var(--ink-2);font-size:14px;padding-block:20px}
-.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 64px;margin-top:48px;padding-top:24px;border-top:4px solid var(--ink)}
-.lower h4{margin:0 0 20px;font-family:var(--sans);font-weight:900;font-size:20px;letter-spacing:-.01em}.lower h4 span{font-family:var(--latin);font-weight:500;color:var(--ink-2);font-size:13px;margin-left:12px;letter-spacing:0}
-.bars{display:grid;gap:10px;font-family:var(--sans);font-size:13.5px}.bars .row{display:grid;grid-template-columns:150px minmax(0,1fr) 44px;gap:12px;align-items:center}
-.bars .row b{font-weight:700}.bars .row b span{color:var(--ink-2);font-weight:500;margin-left:8px;font-size:12px}
-.bars .track{display:flex;gap:2px;height:8px}.bars .track i{flex:1;background:var(--rule)}.bars .track i.on{background:var(--blue)}.bars .track i.now{background:var(--ink)}
-.bars .row .la{text-align:right;font-size:12.5px;color:var(--ink-2)}
-.bars .legend{margin-top:8px;font-family:var(--latin);font-size:12px;color:var(--ink-2);display:flex;gap:16px;flex-wrap:wrap}.bars .legend i{display:inline-block;width:10px;height:8px;vertical-align:middle;margin-right:6px;background:var(--rule)}.bars .legend i.on{background:var(--blue)}.bars .legend i.now{background:var(--ink)}
-.quietp{font-family:var(--sans);font-size:14px;line-height:1.9;color:var(--ink-2)}
-footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--ink);display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:0 64px;font-family:var(--latin);font-size:12px;color:var(--ink-2);line-height:1.7}
-footer ol{margin:6px 0 0;padding-left:1.4em;columns:2;column-gap:32px}footer li{break-inside:avoid;font-family:var(--sans);overflow-wrap:anywhere;padding-right:8px}
-footer .how{font-family:var(--sans);font-size:13px}footer .how b{font-weight:700;color:var(--ink)}footer .sig{margin-top:16px;font-family:var(--sans);font-weight:900;color:var(--ink);font-size:13px;letter-spacing:-.01em}
-@media (max-width:960px){.lead{grid-template-columns:minmax(0,1fr)}.lead .rail,.rail{flex-direction:row;flex-wrap:wrap;gap:4px 20px;padding-top:0;margin-bottom:12px}.rail .src{margin:0;padding:0;border:0}.rail .src b{display:inline;margin-right:8px}
-.lead>div:last-child{order:-1;margin-bottom:12px}.entry{grid-template-columns:minmax(0,1fr)}.entry .body{grid-template-columns:minmax(0,1fr) 120px;gap:0 20px}.lower{grid-template-columns:minmax(0,1fr);gap:40px}footer{grid-template-columns:minmax(0,1fr);gap:24px}footer ol{columns:1}}
-@media (max-width:560px){.masthead{grid-template-columns:minmax(0,1fr);gap:12px}.wk{font-size:120px;transform:none}.pulse{grid-template-columns:minmax(0,1fr);gap:16px}.entry .body{grid-template-columns:minmax(0,1fr)}.entry .body .photo{order:-1;aspect-ratio:16/9;margin-bottom:14px}.bars .row{grid-template-columns:110px minmax(0,1fr) 36px}}
+:root{--paper:#fff;--ink:#000;--mute:#6b6b6b;--faint:#8a8a8a;--hair:#e2e2e2;--sage:#dcded5;--ph:#efefec;--g:clamp(16px,2.4vw,34px);
+--serif:"Newsreader","Noto Serif TC","Songti TC",Georgia,serif;--zh:"Noto Serif TC","Songti TC","PMingLiU",serif;--sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+*{box-sizing:border-box;min-width:0}html{-webkit-text-size-adjust:100%}html,body{overflow-x:clip}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased;font-optical-sizing:auto}
+a{color:inherit;text-decoration:none}p{margin:0}h1,h2,h3{margin:0;font-weight:400}img{display:block;max-width:100%}ol,ul{list-style:none;margin:0;padding:0}
+a:focus-visible,button:focus-visible,select:focus-visible{outline:1px solid currentColor;outline-offset:3px}
+.lb{font-family:var(--sans);font-size:13px;line-height:17px;letter-spacing:.03em}
+.top{display:flex;justify-content:space-between;align-items:center;height:76px;padding-inline:var(--g)}
+.logo{font-family:var(--serif);font-size:26px;letter-spacing:.2em;line-height:1;white-space:nowrap}
+.burger{width:36px;height:36px;margin-right:-4px;border:0;background:none;padding:0 4px;cursor:pointer;display:grid;align-content:center;gap:6px;color:inherit}.burger i{display:block;height:1.5px;background:currentColor}
+.menu{position:fixed;inset:0;z-index:50;background:var(--paper);display:none;overflow:auto}.menu.open{display:block}
+.menu .x i:first-child{transform:translateY(3.75px) rotate(45deg)}.menu .x i:last-child{transform:translateY(-3.75px) rotate(-45deg)}
+.menu nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px var(--g);padding:56px var(--g) 80px}
+.menu nav .lb{display:block;color:var(--mute);margin-bottom:20px}.menu nav a{display:block;font-family:var(--serif);font-size:clamp(34px,4.6vw,60px);line-height:1.18}.menu nav a:hover{color:var(--mute)}
+.draftbar{position:sticky;bottom:0;z-index:30;display:flex;justify-content:space-between;gap:16px;background:#000;color:#fff;padding:14px var(--g);font-family:var(--sans);font-size:13px;line-height:18px}
+/* 每期首頁 */
+.ihead{text-align:center;padding:24px var(--g) 0}
+.ihead h1{font-family:var(--serif);font-size:clamp(34px,3.5vw,50px);line-height:1.04;letter-spacing:-.01em;text-transform:uppercase}
+.ihead .lb{margin-top:16px}
+.cover{display:block;position:relative;width:min(316px,64vw);aspect-ratio:3/4;margin:56px auto 0;overflow:hidden;background:var(--sage);color:#000}
+.cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cover.img{color:#fff}.cover.img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,0) 28%,rgba(0,0,0,0) 62%,rgba(0,0,0,.5))}
+.cover .m{position:absolute;z-index:1;top:7%;left:0;right:0;text-align:center;font-size:clamp(17px,1.9vw,25px);letter-spacing:.2em;line-height:1;white-space:nowrap}
+.cover .c{position:absolute;z-index:1;left:7%;right:7%;bottom:6%;font-size:12.5px;line-height:1.35;text-align:left}.cover .c b{display:block;font-weight:400;text-transform:uppercase}
+.cover .w{position:absolute;z-index:1;right:7%;bottom:6%;font-size:clamp(40px,5vw,64px);line-height:.8}
+.duo{display:flex;justify-content:center;align-items:center;gap:16px;margin:44px 0 0;font-family:var(--sans);font-size:15px}.duo i{width:1px;height:16px;background:var(--ink)}.duo a:hover{color:var(--mute)}
+.hero{position:relative;margin-top:44px;height:min(88vh,800px);min-height:480px;overflow:hidden;background:#1b1b1b;color:#fff}
+.hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.66),rgba(0,0,0,.12) 52%,rgba(0,0,0,0) 72%);pointer-events:none}
+.hero .in{position:absolute;z-index:1;left:var(--g);right:var(--g);bottom:40px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:48px;align-items:end}
+.hero .k{display:block;font-family:var(--serif);font-size:clamp(26px,2.3vw,32px);line-height:1.15;text-transform:uppercase;margin-bottom:8px}
+.hero h2{font-family:var(--zh);font-size:clamp(22px,2.1vw,30px);line-height:1.42;max-width:22em}.hero h2 a:hover{opacity:.85}
+.hero .ls>p{font-size:15px;line-height:20px;text-transform:uppercase;margin-bottom:10px}
+.hero .ls{justify-self:end;width:min(100%,420px)}.hero .ls ol{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:28px;font-family:var(--serif);font-size:15px;line-height:20px}
+.hero .ls li{display:contents}.hero .ls span{opacity:.75}.hero .ls a{opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hero .ls a:hover{opacity:1}
+.sect{padding-top:clamp(88px,9vw,140px)}
+.sh{display:flex;justify-content:space-between;align-items:baseline;gap:24px;margin:0 var(--g) 40px;padding-bottom:12px;border-bottom:1px solid var(--ink)}
+.sh h2{font-family:var(--serif);font-size:clamp(26px,2.3vw,32px);line-height:1.2}.sh a,.sh span{font-family:var(--sans);font-size:13px;white-space:nowrap}.sh a:hover{color:var(--mute)}
+.row{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 4*18px)/4.55);gap:18px;overflow-x:auto;padding:0 var(--g);scroll-padding-inline:var(--g);scroll-snap-type:x mandatory;scrollbar-width:none}.row::-webkit-scrollbar{display:none}.row>*{scroll-snap-align:start}
+.card{display:block}.card .im{position:relative;aspect-ratio:3/4;background:var(--ph);overflow:hidden}.card .im img{width:100%;height:100%;object-fit:cover;transition:opacity .25s}.card:hover .im img{opacity:.88}
+.card .lb{margin-top:8px}.card h3{font-family:var(--sans);font-size:15px;line-height:1.6;font-weight:500;margin-top:10px}.card:hover h3{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.card .d{font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--mute);margin-top:4px}
+.mono{position:absolute;inset:0;display:grid;place-items:center;background:#000;color:#fff;font-family:var(--serif);font-size:clamp(120px,13vw,220px);line-height:1}
+.feat{text-align:center;padding:clamp(104px,10vw,170px) var(--g) 0}
+.feat .k{display:block;font-family:var(--serif);font-size:clamp(28px,3.1vw,46px);line-height:1.08;text-transform:uppercase;margin-bottom:14px}
+.feat h2{font-family:var(--zh);font-size:clamp(22px,2.5vw,34px);line-height:1.55;max-width:26em;margin:0 auto}
+.feat .ph{display:block;width:min(212px,52vw);aspect-ratio:3/4;margin:56px auto 0;overflow:hidden;background:var(--ph);position:relative}.feat .ph img{width:100%;height:100%;object-fit:cover}
+.feat .lb{margin-top:16px}.feat .lb a{text-decoration:underline;text-underline-offset:3px}
+.band{background:var(--sage);margin-top:clamp(104px,10vw,170px);padding:clamp(72px,8vw,120px) var(--g)}
+.band .bh{text-align:center;margin-bottom:clamp(48px,5vw,72px);font-family:var(--serif);font-size:clamp(24px,2.3vw,32px);line-height:1.2}.band .bh h2{text-transform:uppercase}
+.band .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:48px 18px;max-width:1000px;margin:0 auto}
+.band .more{display:inline-block;margin-top:14px;font-family:var(--sans);font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.band .none{font-family:var(--sans);font-size:14px;color:var(--mute);padding-top:12px;border-top:1px solid var(--ink)}
+.wrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) 110px;gap:24px;align-items:center;margin:0 var(--g);padding:20px 0;border-bottom:1px solid var(--ink)}
+.wrow .n{font-family:var(--serif);font-size:clamp(22px,2.2vw,32px);line-height:1.1;text-transform:uppercase}.wrow .n small{display:block;margin-top:6px;font-family:var(--sans);font-size:13px;text-transform:none;color:var(--mute)}
+a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
+.ticks{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}.ticks i{height:10px;box-shadow:inset 0 0 0 1px var(--ink)}.ticks i.on{background:var(--ink)}
+.quiet{margin:40px var(--g) 0;font-family:var(--serif);font-size:clamp(20px,1.9vw,26px);line-height:1.5}.quiet .lb{display:block;margin-bottom:10px;color:var(--mute)}
+.issues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:72px 18px;padding:0 var(--g)}
+.iss{display:block;text-align:center}.iss .cover{width:min(230px,62%);margin:0 auto}.iss .lb{margin-top:40px}.iss .lb u{text-underline-offset:4px;margin-right:8px}
+.iss h3{font-family:var(--serif);font-size:17px;line-height:1.3;text-transform:uppercase;margin-top:12px}.iss .d{font-family:var(--sans);font-size:14px;margin-top:10px;color:var(--mute)}.iss:hover h3{color:var(--mute)}
+.cats{text-align:center;padding:clamp(104px,10vw,170px) var(--g) 0;font-family:var(--serif);font-size:clamp(22px,2.3vw,32px);line-height:1.4}.cats a:hover{color:var(--mute)}.cats a[aria-current]{color:var(--faint)}
+.hr{height:1px;background:var(--ink);margin:56px var(--g) 0}
+.foot{background:#000;color:#fff;margin-top:clamp(88px,9vw,140px);padding:64px var(--g) 28px}
+.foot .ft{text-align:center;font-family:var(--serif);font-size:clamp(24px,2.3vw,32px);line-height:1.2}.foot .ft h2{text-transform:uppercase;letter-spacing:.2em}
+.foot .about{max-width:38em;margin:40px auto 0;text-align:center;font-family:var(--sans);font-size:14px;line-height:1.85;color:#d2d2d2}.foot .about b{color:#fff;font-weight:500}
+.foot .bot{display:flex;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;margin-top:72px;padding-top:16px;border-top:1px solid #fff;font-family:var(--sans);font-size:13px;line-height:18px;text-transform:uppercase;letter-spacing:.03em}
+.foot nav{display:flex;gap:20px;flex-wrap:wrap}.foot a:hover{color:#bdbdbd}
+/* 列表頁(每期全部動態、全部動態、品牌) */
+.phd{text-align:center;padding:72px var(--g) 0}
+.phd h1{font-family:var(--serif);font-size:clamp(34px,3.5vw,50px);line-height:1.04;text-transform:uppercase}
+.phd .zh{font-family:var(--zh);font-size:clamp(18px,1.6vw,22px);margin-top:12px}
+.phd .lb{margin-top:16px}.phd .p{max-width:36em;margin:20px auto 0;font-family:var(--sans);font-size:15px;line-height:1.8;color:var(--mute)}
+.sel{position:relative;display:inline-flex;align-items:center;font-family:var(--sans);font-size:15px;line-height:20px;text-transform:uppercase}
+.sel select{appearance:none;-webkit-appearance:none;border:0;border-radius:0;background:transparent;font:inherit;text-transform:inherit;color:inherit;padding:4px 26px 4px 0;cursor:pointer}
+.sel svg{position:absolute;right:0;width:14px;height:14px;pointer-events:none}
+.filters{margin-top:28px;font-family:var(--serif);font-size:clamp(22px,2.3vw,32px);line-height:1.4}.filters a:hover{color:var(--mute)}.filters a[aria-current]{color:var(--faint)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:64px 18px;padding:56px var(--g) 0}
+.empty{text-align:center;padding:72px var(--g) 0;font-family:var(--sans);font-size:15px;color:var(--mute)}
+.viewing{position:sticky;bottom:0;z-index:20;display:grid;grid-template-columns:1fr auto 1fr;gap:16px;margin-top:96px;padding:14px var(--g);background:var(--paper);border-top:1px solid var(--hair);font-family:var(--sans);font-size:13px;line-height:18px;text-transform:uppercase}
+.viewing>:last-child{text-align:right}.viewing a:hover{color:var(--mute)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:96px var(--g) 0;padding-top:16px;border-top:1px solid var(--ink)}
+.pager a{display:block}.pager .nx{grid-column:2;text-align:right}.pager .lb{color:var(--mute)}.pager b{display:block;font-weight:400;font-family:var(--serif);font-size:clamp(26px,2.3vw,32px);line-height:1.2;margin-top:6px;text-transform:uppercase}.pager a:hover b{color:var(--mute)}
+/* 單則動態 */
+.split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-height:min(calc(100vh - 76px),920px)}
+.split .im{position:relative;background:var(--ph);overflow:hidden;min-height:540px}.split .im img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.split .tx{display:grid;grid-template-rows:auto 1fr;padding:44px var(--g) 44px 44px}
+.split .by{text-align:right;font-size:20px;line-height:1.3}.split .by span{text-transform:uppercase}
+.split h1{align-self:center;text-align:center;font-family:var(--serif);text-transform:uppercase;line-height:.94;letter-spacing:-.015em;overflow-wrap:anywhere}
+.credit{padding:8px var(--g) 0;width:50%}
+.dek{padding:72px var(--g) 0;max-width:calc(30em + 2*var(--g));font-family:var(--zh);font-size:clamp(22px,2.3vw,32px);line-height:1.5}
+.meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;padding:88px var(--g) 0;font-family:var(--sans);font-size:15px;line-height:20px}
+.meta>div>b{display:block;font-weight:400;text-transform:uppercase;letter-spacing:.01em}.meta span{display:block;color:var(--mute);margin-top:2px}
+.body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:104px var(--g) 0;align-items:start}
+.body .side figure{margin:0 0 48px;width:min(330px,100%)}.body .side figure a{display:block;background:var(--ph)}.body .side figcaption{margin-top:8px}
+.txt{max-width:34em;font-family:var(--zh);font-size:18px;line-height:2}.txt>p{text-indent:2em}.txt>p+p{margin-top:1em}
+.why{margin-top:56px;padding-top:16px;border-top:1px solid var(--ink)}.why h2{font-family:var(--serif);font-size:20px;line-height:1.3;text-transform:uppercase;margin-bottom:12px}
+.facts{margin-top:56px;border-top:1px solid var(--ink)}.facts div{display:grid;grid-template-columns:7em minmax(0,1fr);gap:16px;padding:12px 0;border-bottom:1px solid var(--hair);font-family:var(--sans);font-size:14px;line-height:1.75}
+.facts dt{color:var(--mute)}.facts dd{margin:0}.facts a{text-decoration:underline;text-decoration-color:var(--faint);text-underline-offset:3px}.facts a:hover{text-decoration-color:var(--ink)}
+.facts li+li{margin-top:6px}
+@media (max-width:1000px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.row{grid-auto-columns:calc((100% - 2*18px)/2.6)}}
+@media (max-width:900px){.hero .in{grid-template-columns:minmax(0,1fr)}.hero .ls{display:none}
+.split,.body{grid-template-columns:minmax(0,1fr)}.split{min-height:0}.split .im{min-height:0;aspect-ratio:4/5}.split .tx{padding:28px var(--g) 8px}.split h1{margin:40px 0 8px}.credit{width:auto}
+.meta{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.body .side{order:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.body .side figure{width:auto;margin:48px 0 0}
+.band .cols,.issues{grid-template-columns:minmax(0,1fr)}.wrow{grid-template-columns:minmax(0,1fr) 120px}.wrow .ticks{display:none}}
+@media (max-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:44px 12px}.row{grid-auto-columns:72%;gap:12px}.top{height:60px}.logo{font-size:20px}
+.menu nav{grid-template-columns:minmax(0,1fr)}.viewing{grid-template-columns:1fr 1fr}.viewing>:nth-child(2){display:none}.dek,.meta,.body{padding-top:56px}.foot .bot{flex-direction:column}}
 `;
 
-const RADAR = `<svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M8 8 A24 24 0 0 1 32 32"/><path d="M8 16 A16 16 0 0 1 24 32"/><path d="M8 24 A8 8 0 0 1 16 32"/><circle cx="8" cy="32" r="2.6" fill="var(--brass)" stroke="none"/></svg>`;
-const TOGGLE = `<button class="tgl" id="theme-toggle" type="button" aria-pressed="false" aria-label="切換深淺色" title="切換深淺色"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></button>`;
-const SCRIPT = `<script>(function(){var r=document.documentElement,b=document.getElementById('theme-toggle');function a(t){if(t==='dark'){r.setAttribute('data-theme','dark');b.setAttribute('aria-pressed','true')}else{r.removeAttribute('data-theme');b.setAttribute('aria-pressed','false')}}var s=null;try{s=localStorage.getItem('radar-theme')}catch(e){}a(s==='dark'?'dark':'light');b.addEventListener('click',function(){var n=r.getAttribute('data-theme')==='dark'?'light':'dark';a(n);try{localStorage.setItem('radar-theme',n)}catch(e){}})})();</script>`;
+const FONTS = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;600&display=swap';
+const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>';
+const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
 
-function ticks(n: number, total = 8) { return Array.from({ length: total }, (_, i) => `<i${i < n ? ' class="on"' : ''}></i>`).join(''); }
+// ---------- 外框 ----------
+function page(s: Site, o: { title: string; body: string; draft?: string | null; desc?: string }): string {
+  const L = s.link;
+  const nav = `<div class="top"><a class="logo" href="${esc(L('/'))}">APAC RADAR</a><button class="burger x" type="button" data-menu aria-label="關閉選單"><i></i><i></i></button></div>
+<nav aria-label="網站選單"><div><span class="lb">Read</span><a href="${esc(L('/'))}">This Week</a><a href="${esc(L('/w'))}">All Issues</a><a href="${esc(L('/c'))}">All Stories</a><a href="${esc(L('/b'))}">Brands</a></div>
+<div><span class="lb">Categories</span>${CATEGORIES.map(c => `<a href="${esc(L('/c/' + c))}">${CATEGORY_EN[c]}</a>`).join('')}</div></nav>`;
+  return `<!doctype html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${esc(o.title)}</title><meta name="robots" content="noindex,nofollow">${o.desc ? `<meta name="description" content="${esc(o.desc)}">` : ''}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONTS}">
+<style>${CSS}</style></head><body>
+<header class="top"><a class="logo" href="${esc(L('/'))}">APAC RADAR</a><button class="burger" type="button" data-menu aria-label="開啟選單" aria-controls="menu"><i></i><i></i></button></header>
+<div class="menu" id="menu">${nav}</div>
+<main>${o.body}</main>
+${footer(s)}
+${o.draft ? `<div class="draftbar"><span>草稿預覽:這一期還沒發布,只有帶管理金鑰的人看得到。</span><span>${esc(wlabel(o.draft))}</span></div>` : ''}
+${SCRIPT}</body></html>`;
+}
 
-export function renderIssue(b: IssueBundle, opts: { siteName: string; orgName: string; brandCount: number }): string {
+function footer(s: Site): string {
+  const L = s.link;
+  return `<footer class="foot"><div class="ft"><h2>APAC Radar</h2><p>A weekly read on tea brands across Asia Pacific</p></div>
+<p class="about">每週一早上,系統替 17 個茶飲品牌整理上一週的<b>新品</b>、<b>行銷檔期</b>與<b>會員經營</b>動態。每則都附來源;標示<b>已佐證</b>代表至少兩個獨立來源說法一致,<b>單一來源</b>的請先看、別轉述。圖片以品牌官方素材優先,其次是報導配圖,都標出處。</p>
+<div class="bot"><span>${esc(s.orgName)}</span><nav><a href="${esc(L('/'))}">This Week</a><a href="${esc(L('/w'))}">All Issues</a><a href="${esc(L('/c'))}">All Stories</a><a href="${esc(L('/b'))}">Brands</a></nav><span>Internal use only</span></div></footer>`;
+}
+
+// ---------- 元件 ----------
+interface Ctx { s: Site; brands: Map<string, Brand>; images: Record<string, ItemImage[]> }
+const ctxOf = (s: Site, brands: Brand[], images: Record<string, ItemImage[]>): Ctx => ({ s, brands: new Map(brands.map(b => [b.id, b])), images });
+const storyHref = (c: Ctx, it: Item) => c.s.link(`/s/${it.id}`);
+const imgSrc = (im: ItemImage) => `/img/${im.kv_key.replace(/^img\//, '')}`;
+const initial = (c: Ctx, it: Item) => (enName(c.brands.get(it.brand_id), it.brand_id).trim()[0] ?? '·').toUpperCase();
+
+function picture(c: Ctx, it: Item, eager = false) {
+  const im = c.images[it.id]?.[0];
+  return im ? `<img src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
+}
+
+/** 圖卡。issue:同一期裡,標籤寫品牌;cross:跨期,標籤寫第幾週 */
+function card(c: Ctx, it: Item, mode: 'issue' | 'cross') {
+  const b = c.brands.get(it.brand_id);
+  const label = mode === 'issue' ? `${CATEGORY_EN[it.category]}, ${enName(b, it.brand_id)}` : `${CATEGORY_EN[it.category]}, ${wlabel(it.week)}`;
+  const dek = mode === 'issue' ? [it.market, itemDates(it)].filter(Boolean).join(' · ') : [b?.name_zh ?? it.brand_id, it.market].filter(Boolean).join(' · ');
+  return `<a class="card" href="${esc(storyHref(c, it))}"><div class="im">${picture(c, it)}</div><p class="lb">${esc(label)}</p><h3>${esc(it.title)}</h3><p class="d">${esc(dek)}</p></a>`;
+}
+
+function coverBlock(issue: { week: string; no: number | null; range_start: string; range_end: string }, key: string | null, href: string, tag = 'a') {
+  const img = key ? `<img src="${esc('/img/' + key.replace(/^img\//, ''))}" alt="" loading="lazy">` : '';
+  return `<${tag} class="cover${key ? ' img' : ''}"${tag === 'a' ? ` href="${esc(href)}"` : ''}>${img}<span class="m">APAC RADAR</span><span class="c"><b>Week ${esc(wnum(issue.week))} Issue</b>${esc(rangeShort(issue.range_start, issue.range_end))}</span><span class="w">${esc(pad2(issue.no))}</span></${tag}>`;
+}
+
+function issueSelect(s: Site, issues: IssueSummary[], current: string | null, suffix: string, allLabel?: string) {
+  const opts = [
+    ...(allLabel ? [`<option value="${esc(s.link('/c' + suffix))}"${current ? '' : ' selected'}>${esc(allLabel)}</option>`] : []),
+    ...issues.map(i => `<option value="${esc(s.link(`/w/${i.week}/stories${suffix ? '?c=' + suffix.slice(1) : ''}`))}"${i.week === current ? ' selected' : ''}>${esc(wlabel(i.week))}${i.status === 'published' ? '' : '(草稿)'}</option>`),
+  ];
+  return `<label class="sel"><span class="vh" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">選擇期數</span><select data-go>${opts.join('')}</select>${CHEVRON}</label>`;
+}
+
+function filterLine(hrefs: { all: string; cat: (c: Cat) => string }, current: Cat | null) {
+  const a = (href: string, text: string, on: boolean) => `<a href="${esc(href)}"${on ? ' aria-current="page"' : ''}>${text}</a>`;
+  return `<p class="filters">${[a(hrefs.all, 'All', !current), ...CATEGORIES.map(c => a(hrefs.cat(c), CATEGORY_EN[c], current === c))].join(', ')}</p>`;
+}
+
+// ---------- 每期首頁(首頁就是最新一期) ----------
+export function renderIssueHome(b: IssueBundle, s: Site, issues: IssueSummary[]): string {
+  const L = s.link;
+  const c = ctxOf(s, b.brands, b.images);
   const { issue, items } = b;
-  const brandOf = (id: string): Brand | undefined => b.brands.find(x => x.id === id);
-  const bname = (id: string) => brandOf(id)?.name_zh ?? id;
-  const bsub = (it: Item) => { const br = brandOf(it.brand_id); return br?.name_en && br.name_en !== br.name_zh ? br.name_en : it.market; };
-  const srcIndex = new Map<string, number>();
-  const allSources: { n: number; publisher: string; title: string; date: string | null }[] = [];
-  for (const it of items) for (const s of b.sources[it.id] ?? []) {
-    if (!srcIndex.has(s.url)) { srcIndex.set(s.url, allSources.length + 1); allSources.push({ n: allSources.length + 1, publisher: s.publisher ?? '', title: s.title ?? s.url, date: s.published_at }); }
-  }
-  const counts = { new_product: 0, campaign: 0, loyalty: 0 } as Record<string, number>;
-  const brandsByCat: Record<string, Set<string>> = { new_product: new Set(), campaign: new Set(), loyalty: new Set() };
-  for (const it of items) { counts[it.category]++; brandsByCat[it.category].add(it.brand_id); }
+  const lead = pickLead(items, b.images);
+  const rest = items.filter(i => i !== lead);
   const active = new Set(items.map(i => i.brand_id)).size;
-  const wk = 'W' + issue.week.slice(-2);
+  const coverItem = rest.find(i => b.images[i.id]?.length) ?? lead;
+  const coverKey = coverItem ? b.images[coverItem.id]?.[0]?.kv_key ?? null : null;
   const draft = issue.status !== 'published';
 
-  // 頭條:is_lead 優先,否則 rank 最低且有圖
-  const lead = items.find(i => i.is_lead) ?? items.slice().sort((a, c) => ((b.images[a.id]?.length ? 0 : 100) + a.rank) - ((b.images[c.id]?.length ? 0 : 100) + c.rank))[0];
+  const head = `<section class="ihead"><h1>Issue ${esc(pad2(issue.no))}<br>${esc(wlabel(issue.week))}</h1>
+<p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · ${items.length} stories from ${active} brands</p>
+${coverBlock(issue, coverKey, '', 'div')}
+<p class="duo"><a href="#inside">Read</a><i aria-hidden="true"></i><a href="${esc(L(`/w/${issue.week}/stories`))}">All Stories</a></p></section>`;
 
-  const rail = (it: Item) => {
-    const src = b.sources[it.id] ?? [];
-    const nums = src.map(s => srcIndex.get(s.url)).filter(Boolean).join('、');
-    return `<div class="rail"><span class="d">${esc(md(it.date_start)) || '—'}</span><span>${it.date_end ? '– ' + esc(md(it.date_end)) : esc(weekday(it.date_start))}</span><span class="zh">${esc(it.market)}${it.status_note ? ' · ' + esc(it.status_note) : ''}</span>
-      <div class="src"><b>${src.length} source${src.length > 1 ? 's' : ''}</b>${it.confidence === 'verified' ? '已佐證' : '<span class="one">待佐證</span>'}${nums ? ` · ${nums}` : ''}</div></div>`;
+  const leadB = lead ? c.brands.get(lead.brand_id) : undefined;
+  const hero = lead ? `<section class="hero">${b.images[lead.id]?.length ? `<img src="${esc(imgSrc(b.images[lead.id][0]))}" alt="" loading="eager">` : ''}
+<div class="in"><div><span class="k">${esc(enName(leadB, lead.brand_id))}</span><h2><a href="${esc(storyHref(c, lead))}">${esc(lead.title)}</a></h2></div>
+<div class="ls"><p>This Week</p><ol>${items.map(i => `<li><span>${esc(CATEGORY_EN[i.category])}</span><a href="${esc(storyHref(c, i))}" title="${esc(i.title)}">${esc(enName(c.brands.get(i.brand_id), i.brand_id))} · ${esc(i.market)}</a></li>`).join('')}</ol></div></div></section>` : '';
+
+  const inside = rest.length ? `<section class="sect" id="inside"><div class="sh"><h2>Inside ${esc(wlabel(issue.week))}</h2><a href="${esc(L(`/w/${issue.week}/stories`))}">View All</a></div>
+<div class="row">${rest.map(i => card(c, i, 'issue')).join('')}</div></section>` : `<div id="inside"></div>`;
+
+  const noteItem = rest.filter(i => i.observation).sort((x, y) => ((b.images[x.id]?.length ? 0 : 100) + x.rank) - ((b.images[y.id]?.length ? 0 : 100) + y.rank))[0];
+  const feat = noteItem ? `<section class="feat"><span class="k">Worth Noting</span><h2>${esc(noteItem.observation)}</h2>
+<a class="ph" href="${esc(storyHref(c, noteItem))}">${picture(c, noteItem)}</a><p class="lb">${esc(CATEGORY_EN[noteItem.category])}, <a href="${esc(storyHref(c, noteItem))}">${esc(c.brands.get(noteItem.brand_id)?.name_zh ?? noteItem.brand_id)}</a></p></section>` : '';
+
+  const band = `<section class="band"><div class="bh"><h2>By Category</h2><p>Three ways into ${esc(wlabel(issue.week))}</p></div><div class="cols">${CATEGORIES.map(cat => {
+    const list = items.filter(i => i.category === cat);
+    const top = pickLead(list, b.images);
+    const more = `<a class="more" href="${esc(L(`/w/${issue.week}/stories?c=${cat}`))}">${list.length} ${list.length === 1 ? 'story' : 'stories'} in ${CATEGORY_EN[cat]}</a>`;
+    return `<div>${top ? card(c, top, 'issue') : `<p class="lb" style="margin-bottom:8px">${CATEGORY_EN[cat]}</p><p class="none">這一週沒有${CATEGORY_ZH[cat]}的動態。</p>`}${top ? more : ''}</div>`;
+  }).join('')}</div></section>`;
+
+  const thisWeek = new Set(items.map(i => i.brand_id));
+  const rows = b.brands.slice().sort((x, y) => (+thisWeek.has(y.id) - +thisWeek.has(x.id)) || ((b.activity[y.id]?.length ?? 0) - (b.activity[x.id]?.length ?? 0)) || x.sort - y.sort)
+    .filter(br => thisWeek.has(br.id)).map(br => {
+      const weeks = new Set(b.activity[br.id] ?? []); const n = items.filter(i => i.brand_id === br.id).length; const mk: string[] = JSON.parse(br.markets);
+      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${esc(enName(br))}<small>${esc(br.name_zh)} · ${esc(mk.join(' · '))}</small></span><span class="ticks" title="近八週有動態的週">${b.weeks8.map(w => `<i${weeks.has(w) ? ' class="on"' : ''}></i>`).join('')}</span><span class="lb c">${n} ${n === 1 ? 'story' : 'stories'}</span></a>`;
+    }).join('');
+  const watch = `<section class="sect"><div class="sh"><h2>Brand Watch</h2><span>Last eight weeks</span></div>${rows}
+<p class="quiet"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ') || '沒有品牌安靜。'}</p></section>`;
+
+  const past = issues.slice(0, 3);
+  const pastHtml = past.length > 1 || (past.length === 1 && past[0].week !== issue.week) ? `<section class="sect"><div class="sh"><h2>Recent Issues</h2><a href="${esc(L('/w'))}">View All</a></div>
+<div class="issues">${past.map(p => issueTile(s, p, p.week === issues[0]?.week)).join('')}</div></section>` : '';
+
+  const body = `${head}${hero}${inside}${feat}${band}${watch}${pastHtml}
+<p class="cats"><a href="${esc(L('/c'))}">All</a>, ${CATEGORIES.map(cat => `<a href="${esc(L('/c/' + cat))}">${CATEGORY_EN[cat]}</a>`).join(', ')}, <a href="${esc(L('/b'))}">Brands</a></p><div class="hr"></div>`;
+  return page(s, { title: `APAC Radar · ${wlabel(issue.week)}, ${rangeShort(issue.range_start, issue.range_end)}`, body, draft: draft ? issue.week : null, desc: lead?.title });
+}
+
+function issueTile(s: Site, p: IssueSummary, latest: boolean) {
+  const href = s.link(`/w/${p.week}`);
+  return `<a class="iss" href="${esc(href)}">${coverBlock(p, p.cover_key, href, 'div')}<p class="lb">${latest ? '<u>New</u>' : ''}${p.status === 'published' ? 'Issue ' + esc(pad2(p.no)) : '草稿'}</p>
+<h3>${esc(wlabel(p.week))}<br>${esc(rangeShort(p.range_start, p.range_end))}</h3><p class="d">${p.items} stories · ${p.brands} brands</p></a>`;
+}
+
+// ---------- 每期全部動態 ----------
+export function renderIssueStories(b: IssueBundle, s: Site, issues: IssueSummary[], cat: Cat | null): string {
+  const L = s.link;
+  const c = ctxOf(s, b.brands, b.images);
+  const { issue } = b;
+  const list = cat ? b.items.filter(i => i.category === cat) : b.items;
+  const idx = issues.findIndex(i => i.week === issue.week);
+  const older = idx >= 0 ? issues[idx + 1] : undefined, newer = idx > 0 ? issues[idx - 1] : undefined;
+  const pager = older || newer ? `<nav class="pager" aria-label="上一期下一期">${older ? `<a href="${esc(L(`/w/${older.week}/stories`))}"><span class="lb">Previous Issue</span><b>${esc(wlabel(older.week))}</b></a>` : ''}${newer ? `<a class="nx" href="${esc(L(`/w/${newer.week}/stories`))}"><span class="lb">Next Issue</span><b>${esc(wlabel(newer.week))}</b></a>` : ''}</nav>` : '';
+  const body = `<section class="phd">${issueSelect(s, issues.length ? issues : [{ ...issue, items: 0, brands: 0, lead_title: null, lead_brand: null, cover_key: null }], issue.week, cat ? '/' + cat : '', 'All Issues')}
+${filterLine({ all: L(`/w/${issue.week}/stories`), cat: x => L(`/w/${issue.week}/stories?c=${x}`) }, cat)}
+<p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · <a href="${esc(L(`/w/${issue.week}`))}" style="text-decoration:underline;text-underline-offset:3px">Back to the issue</a></p></section>
+<div class="hr"></div>
+${list.length ? `<div class="grid">${list.map(i => card(c, i, 'issue')).join('')}</div>` : `<p class="empty">這一期沒有${cat ? CATEGORY_ZH[cat] + '的' : ''}動態。</p>`}
+${!cat && b.quiet.length ? `<p class="quiet" style="margin-top:96px"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ')}</p>` : ''}
+${pager}
+<div class="viewing"><a href="${esc(L('/c'))}">Stories</a><span>Viewing: ${esc(wlabel(issue.week))}${cat ? ', ' + CATEGORY_EN[cat] : ''} (${list.length})</span><a href="${esc(L('/w'))}">All Issues</a></div>`;
+  return page(s, { title: `${wlabel(issue.week)}${cat ? ' · ' + CATEGORY_EN[cat] : ''} · APAC Radar`, body, draft: issue.status !== 'published' ? issue.week : null });
+}
+
+// ---------- 全部動態 / 分類 ----------
+export function renderStories(bundle: ItemsBundle, brands: Brand[], s: Site, issues: IssueSummary[], cat: Cat | null): string {
+  const L = s.link;
+  const c = ctxOf(s, brands, bundle.images);
+  const intro: Record<Cat, string> = {
+    new_product: '新飲品、季節系列、菜單改版、品項下架與價格調整。',
+    campaign: '聯名、快閃、促銷、節慶活動、名人合作,以及開幕檔期的促銷機制。',
+    loyalty: 'App 改版、點數與等級規則、訂閱制、生日禮與入會禮、會員專屬活動,以及公開揭露的會員數字。',
   };
-  const photo = (it: Item, big = false) => {
-    const imgs = b.images[it.id] ?? [];
-    if (!imgs.length) return `<div><div class="photo"><span>尚無圖片</span></div></div>`;
-    const first = imgs[0];
-    const more = imgs.length > 1 ? `<div class="more">${imgs.slice(1).map(im => `<a href="/img/${esc(im.kv_key)}" target="_blank" rel="noopener"><img src="/img/${esc(im.kv_key)}" alt="" loading="lazy"></a>`).join('')}</div>` : '';
-    return `<div><a class="photo" href="/img/${esc(first.kv_key)}" target="_blank" rel="noopener"><img src="/img/${esc(first.kv_key)}" alt="${esc(it.title)}" loading="${big ? 'eager' : 'lazy'}"></a>${more}<div class="credit">${esc(first.credit)}</div></div>`;
-  };
-  const note = (it: Item) => it.observation ? `<div class="note"><b>觀察</b>${esc(it.observation)}</div>` : '';
+  const body = `<section class="phd">${issueSelect(s, issues, null, cat ? '/' + cat : '', 'All Issues')}
+${filterLine({ all: L('/c'), cat: x => L('/c/' + x) }, cat)}
+${cat ? `<p class="p">${esc(intro[cat])}</p>` : `<p class="p">每一期收錄的全部動態,新的在前。</p>`}</section>
+<div class="hr"></div>
+${bundle.items.length ? `<div class="grid">${bundle.items.map(i => card(c, i, 'cross')).join('')}</div>` : `<p class="empty">目前還沒有${cat ? CATEGORY_ZH[cat] + '的' : ''}動態。</p>`}
+<div class="viewing"><a href="${esc(L('/c'))}">Stories</a><span>Viewing: ${cat ? CATEGORY_EN[cat] : 'All'} (${bundle.items.length})</span><a href="${esc(L('/b'))}">Brands</a></div>`;
+  return page(s, { title: `${cat ? CATEGORY_EN[cat] : 'All Stories'} · APAC Radar`, body });
+}
 
-  const leadHtml = lead ? `<article class="lead" id="${esc(lead.id)}">${rail(lead)}<div><div class="brand">${esc(bname(lead.brand_id))}<span>${esc(bsub(lead))}</span></div><h2>${esc(lead.title)}</h2><p class="stand">${esc(lead.summary)}</p>${note(lead)}</div>${photo(lead, true)}</article>` : '';
+// ---------- 全部期數 ----------
+export function renderArchive(issues: IssueSummary[], s: Site): string {
+  const body = `<section class="phd"><h1>All Issues</h1><p class="lb">${issues.length} ${issues.length === 1 ? 'issue' : 'issues'} so far · 每週一出刊</p></section><div class="hr" style="margin-bottom:72px"></div>
+${issues.length ? `<div class="issues">${issues.map((p, i) => issueTile(s, p, i === 0)).join('')}</div>` : '<p class="empty">還沒有任何一期。</p>'}`;
+  return page(s, { title: 'All Issues · APAC Radar', body });
+}
 
-  const section = (cat: Item['category']) => {
-    const list = items.filter(i => i.category === cat && i.id !== lead?.id);
-    const body = list.length ? list.map(it => `<div class="entry" id="${esc(it.id)}">${rail(it)}<div><div class="brand">${esc(bname(it.brand_id))}<span>${esc(bsub(it))}</span></div><h3>${esc(it.title)}</h3><div class="body${b.images[it.id]?.length ? '' : ' noimg'}"><div><p>${esc(it.summary)}</p>${note(it)}</div>${b.images[it.id]?.length ? photo(it) : ''}</div></div></div>`).join('')
-      : `<p class="empty">${lead?.category === cat ? '本週這一類只有頭條那一則。' : '本週沒有觀察到這一類的動態。'}</p>`;
-    return `<section class="sect"><div class="vt"><i></i><span>${CATEGORY_ZH[cat]}</span><small>${brandsByCat[cat].size} / ${opts.brandCount}</small></div><div class="list">${body}</div></section>`;
-  };
+// ---------- 品牌一覽 ----------
+const TIERS: [string, string, string][] = [['core', 'Key Competitors', '重點追蹤'], ['apac', 'Across Asia', '亞太在地品牌'], ['tw', 'Taiwan', '台灣品牌']];
+export function renderBrands(brands: Brand[], stats: BrandStat[], s: Site): string {
+  const L = s.link;
+  const st = new Map(stats.map(x => [x.brand_id, x]));
+  const sections = TIERS.map(([tier, en, zh]) => {
+    const list = brands.filter(b => b.tier === tier);
+    if (!list.length) return '';
+    return `<section class="sect"><div class="sh"><h2>${en}</h2><span>${zh}</span></div>${list.map(br => {
+      const x = st.get(br.id); const mk: string[] = JSON.parse(br.markets);
+      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${esc(enName(br))}<small>${esc(br.name_zh)}</small></span><span class="lb">${esc(mk.join(' · '))}</span><span class="lb c">${x ? `${x.items} ${x.items === 1 ? 'story' : 'stories'}<br>Latest ${esc(wlabel(x.last_week ?? ''))}` : 'No stories yet'}</span></a>`;
+    }).join('')}</section>`;
+  }).join('');
+  const body = `<section class="phd"><h1>Brands</h1><p class="p">我們每週追蹤的 ${brands.length} 個茶飲品牌。點品牌可以看它歷來的所有動態。</p></section>${sections}`;
+  return page(s, { title: 'Brands · APAC Radar', body });
+}
 
-  const thisWeekActive = new Set(items.map(i => i.brand_id));
-  const bars = b.brands.slice().sort((x, y) => (thisWeekActive.has(y.id) ? 1 : 0) - (thisWeekActive.has(x.id) ? 1 : 0) || ((b.activity[y.id]?.length ?? 0) - (b.activity[x.id]?.length ?? 0)) || x.sort - y.sort)
-    .map(br => { const weeks = new Set(b.activity[br.id] ?? []); const k = weeks.size; const mk: string[] = JSON.parse(br.markets);
-      return `<div class="row"><b>${esc(br.name_zh)}<span>${esc(mk.slice(0, 2).join(' · '))}</span></b><div class="track">${b.weeks8.map((w, i) => `<i class="${weeks.has(w) ? (i === b.weeks8.length - 1 ? 'now' : 'on') : ''}"></i>`).join('')}</div><span class="la">${k} / 8</span></div>`; }).join('');
+// ---------- 單一品牌 ----------
+export function renderBrand(br: Brand, bundle: ItemsBundle, brands: Brand[], s: Site, cat: Cat | null): string {
+  const L = s.link;
+  const c = ctxOf(s, brands, bundle.images);
+  const mk: string[] = JSON.parse(br.markets);
+  const list = cat ? bundle.items.filter(i => i.category === cat) : bundle.items;
+  const tier = TIERS.find(t => t[0] === br.tier);
+  const body = `<section class="phd"><h1>${esc(enName(br))}</h1><p class="zh">${esc(br.name_zh)}</p>
+<p class="lb">${esc(mk.join(' · '))}${tier ? ' · ' + tier[1] : ''}</p><p class="p">${esc(br.focus)}</p>
+${filterLine({ all: L('/b/' + br.id), cat: x => L(`/b/${br.id}?c=${x}`) }, cat)}</section>
+<div class="hr"></div>
+${list.length ? `<div class="grid">${list.map(i => card(c, i, 'cross')).join('')}</div>` : `<p class="empty">目前收錄的期數裡,${esc(br.name_zh)}還沒有${cat ? CATEGORY_ZH[cat] + '的' : '符合條件的'}動態。</p>`}
+<div class="viewing"><a href="${esc(L('/b'))}">Brands</a><span>Viewing: ${esc(enName(br))} (${list.length})</span><a href="${esc(L('/c'))}">All Stories</a></div>`;
+  return page(s, { title: `${enName(br)} ${br.name_zh} · APAC Radar`, body });
+}
 
-  const pulseCap = (cat: string) => `${brandsByCat[cat].size} 個品牌有動態`;
+// ---------- 單則動態 ----------
+export function renderStory(b: IssueBundle, it: Item, s: Site): string {
+  const L = s.link;
+  const c = ctxOf(s, b.brands, b.images);
+  const br = c.brands.get(it.brand_id);
+  const name = enName(br, it.brand_id);
+  const imgs = b.images[it.id] ?? [];
+  const srcs: ItemSource[] = b.sources[it.id] ?? [];
+  const n = name.length;
+  const fs = n <= 6 ? 'clamp(68px,9vw,140px)' : n <= 10 ? 'clamp(58px,7vw,112px)' : 'clamp(44px,5.2vw,84px)';
+  const first = imgs[0];
+  const left = first ? `<a href="${esc(imgSrc(first))}" target="_blank" rel="noopener" class="im"><img src="${esc(imgSrc(first))}" alt="${esc(it.title)}" loading="eager"></a>` : `<div class="im"><span class="mono" aria-hidden="true">${esc(initial(c, it))}</span></div>`;
+  const verified = it.confidence === 'verified';
+  const others = b.items.filter(x => x.id !== it.id).sort((x, y) => (+(y.category === it.category) - +(x.category === it.category)) || ((b.images[x.id]?.length ? 0 : 100) + x.rank) - ((b.images[y.id]?.length ? 0 : 100) + y.rank)).slice(0, 3);
 
-  return `<!doctype html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${wk} 亞太競品週報 · ${esc(issue.range_start)} 至 ${esc(issue.range_end)}</title>
-<meta name="robots" content="noindex,nofollow">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Noto+Serif+TC:wght@400;600&family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&display=swap">
-<style>${CSS}</style></head><body><div class="wrap">
-<div class="topbar"><span class="mark">${RADAR}${esc(opts.siteName)}</span><span class="r">${draft ? '<span class="draft">草稿 · 尚未發布</span>' : ''}No. ${String(issue.no ?? 1).padStart(2, '0')} · 每週一 09:00 出刊${TOGGLE}</span></div>
-<header class="masthead"><div class="wk">${wk}</div><div class="mh"><h1>亞太競品週報</h1><div class="line"><span><b>${esc(issue.range_start.replace(/-/g, '.'))}</b> – <b>${esc(issue.range_end.slice(5).replace(/-/g, '.'))}</b></span><span class="zh">${esc(opts.orgName)}</span><span>${opts.brandCount} brands · ${active} active · ${opts.brandCount - active} quiet</span></div></div></header>
-<div class="pulse">
-<div><span class="n">${counts.new_product}</span><span class="t">新品與菜單</span><div class="ticks">${ticks(counts.new_product)}</div><span class="cap">${pulseCap('new_product')}</span></div>
-<div><span class="n">${counts.campaign}</span><span class="t">行銷檔期</span><div class="ticks">${ticks(counts.campaign)}</div><span class="cap">${pulseCap('campaign')}</span></div>
-<div><span class="n">${counts.loyalty}</span><span class="t">會員經營</span><div class="ticks">${ticks(counts.loyalty)}</div><span class="cap">${pulseCap('loyalty')}</span></div>
-</div>
-${leadHtml}
-${section('new_product')}${section('campaign')}${section('loyalty')}
-<div class="lower">
-<div><h4>${opts.brandCount} 個品牌的八週<span>activity, ${esc(b.weeks8[0]?.replace(/^\d{4}-/, ''))} – ${esc(b.weeks8[b.weeks8.length - 1]?.replace(/^\d{4}-/, ''))}</span></h4><div class="bars">${bars}<div class="legend"><span><i class="now"></i>本週有動態</span><span><i class="on"></i>該週有動態</span><span><i></i>安靜</span></div></div></div>
-<div><h4>本週安靜<span>quiet, ${b.quiet.length} brands</span></h4><p class="quietp">${b.quiet.map(q => esc(q.name_zh)).join(' · ') || '沒有品牌安靜。'}<br>安靜代表這七天在官網、公開社群與新聞上沒有新品、檔期或會員方案的變動。連續三週安靜會標記。</p></div>
-</div>
-<footer><div><div>Sources</div><ol>${allSources.map(s => `<li>${esc(s.publisher)}${s.publisher ? ',' : ''}${esc(s.title)}${s.date ? ',' + esc(s.date) : ''}</li>`).join('')}</ol></div>
-<div class="how"><p><b>怎麼讀。</b>每則左側是日期、市場與來源數。<b>「已佐證」</b>代表至少兩個獨立來源說法一致;黃銅色的<b>「待佐證」</b>只找到一個來源,先看、別轉述。圖片以品牌官方素材優先,其次為報導配圖,皆標示出處。</p><div class="sig">${esc(opts.siteName)} · 僅供內部閱讀</div></div></footer>
-</div>${SCRIPT}</body></html>`;
+  const facts = [
+    ['期間', itemDates(it) || '未標示'],
+    ['狀態', it.status_note || ''],
+    ['市場', it.market],
+    ['可信度', verified ? '已佐證:至少兩個獨立來源說法一致' : '單一來源:只找到一個來源,先看、別轉述'],
+  ].filter(f => f[1]).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+  const srcList = srcs.length ? `<div><dt>來源</dt><dd><ol>${srcs.map(x => { const u = safeUrl(x.url); const t = `${x.publisher || host(x.url)}${x.title ? ',' + x.title : ''}${x.published_at ? ',' + x.published_at : ''}`; return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t)}</li>`; }).join('')}</ol></dd></div>` : '';
+
+  const body = `<article><section class="split">${left}<div class="tx"><p class="by">${esc(wlabel(it.week))}<br><span>${esc(rangeShort(b.issue.range_start, b.issue.range_end))}</span></p><h1 style="font-size:${fs}">${esc(name)}</h1></div></section>
+${first ? `<p class="lb credit">${esc(first.credit)}</p>` : ''}
+<p class="dek">${esc(it.title)}</p>
+<div class="meta"><div><b>${esc(wlabel(it.week))}, Issue ${esc(pad2(b.issue.no))}</b><span>${esc(rangeShort(b.issue.range_start, b.issue.range_end))}</span></div>
+<div><b><a href="${esc(L('/c/' + it.category))}">${CATEGORY_EN[it.category]}</a></b><span>${CATEGORY_ZH[it.category]}</span></div>
+<div><b><a href="${esc(L('/b/' + it.brand_id))}">${esc(name)}</a></b><span>${esc(br?.name_zh ?? '')} · ${esc(it.market)}</span></div>
+<div><b>${srcs.length} ${srcs.length === 1 ? 'Source' : 'Sources'}</b><span>${verified ? '已佐證' : '單一來源'}</span></div></div>
+<div class="body"><div class="side">${imgs.slice(1).map(im => `<figure><a href="${esc(imgSrc(im))}" target="_blank" rel="noopener"><img src="${esc(imgSrc(im))}" alt="" loading="lazy"></a><figcaption class="lb">${esc(im.credit)}</figcaption></figure>`).join('')}</div>
+<div class="txt"><p>${esc(it.summary)}</p>
+${it.observation ? `<div class="why"><h2>Why it matters</h2><p>${esc(it.observation)}</p></div>` : ''}
+<dl class="facts">${facts}${srcList}</dl></div></div></article>
+${others.length ? `<section class="band"><div class="bh"><h2>More from ${esc(wlabel(it.week))}</h2><p><a href="${esc(L(`/w/${it.week}`))}">Back to the issue</a></p></div><div class="cols">${others.map(o => card(c, o, 'issue')).join('')}</div></section>` : ''}`;
+  return page(s, { title: `${name}:${it.title} · APAC Radar`, body, draft: b.issue.status !== 'published' ? b.issue.week : null, desc: it.summary.slice(0, 140) });
+}
+
+/** 沒有任何一期時的首頁 */
+export function renderEmpty(s: Site): string {
+  return page(s, { title: 'APAC Radar', body: `<section class="phd"><h1>Coming Soon</h1><p class="p">第一期還沒發布。每週一早上整理好之後,這裡會出現最新一期。</p></section>` });
 }

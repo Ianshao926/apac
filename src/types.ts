@@ -103,6 +103,7 @@ export interface IssueSummary extends Issue {
   brands: number;
   lead_title: string | null;
   lead_brand: string | null;
+  cover_key: string | null;   // 封面用的圖(頭條優先,沒有就取本期第一張圖)
 }
 
 /** 跨期頁面(品牌頁、分類頁)用的一組動態 */

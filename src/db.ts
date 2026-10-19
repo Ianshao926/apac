@@ -161,7 +161,9 @@ export async function listIssues(env: Env, drafts: boolean): Promise<IssueSummar
        (SELECT COUNT(*) FROM items t WHERE t.week=i.week AND t.hidden=0) AS items,
        (SELECT COUNT(DISTINCT t.brand_id) FROM items t WHERE t.week=i.week AND t.hidden=0) AS brands,
        (SELECT t.title FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_title,
-       (SELECT t.brand_id FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_brand
+       (SELECT t.brand_id FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_brand,
+       (SELECT m.kv_key FROM items t JOIN item_images m ON m.item_id=t.id WHERE t.week=i.week AND t.hidden=0
+          ORDER BY t.is_lead DESC, t.rank, t.created_at, m.sort LIMIT 1) AS cover_key
      FROM issues i WHERE (? = 1 OR i.status='published') ORDER BY i.week DESC`).bind(drafts ? 1 : 0).all<IssueSummary>();
   return r.results;
 }
@@ -182,4 +184,10 @@ export async function brandStats(env: Env, drafts: boolean): Promise<BrandStat[]
      FROM items t JOIN issues i ON i.week=t.week
      WHERE t.hidden=0 AND (? = 1 OR i.status='published') GROUP BY t.brand_id`).bind(drafts ? 1 : 0).all<BrandStat>();
   return r.results;
+}
+
+/** 單則動態所在的那一期(故事頁用) */
+export async function weekOfItem(env: Env, id: string): Promise<string | null> {
+  const r = await env.DB.prepare('SELECT week FROM items WHERE id=? AND hidden=0').bind(id).first<{ week: string }>();
+  return r?.week ?? null;
 }

@@ -1,8 +1,8 @@
-import type { Brand, Env } from './types';
+import { CATEGORIES, type Brand, type Env, type Item } from './types';
 import { targetWeekFor, parseWeekId } from './week';
-import { allBrands, claimRun, ensureIssue, getIssue, loadBundle, pendingBrands, recordRun, saveReport } from './db';
+import { allBrands, brandStats, claimRun, ensureIssue, getIssue, listIssues, loadBundle, loadItems, pendingBrands, recordRun, saveReport, weekOfItem } from './db';
 import { researchBrand } from './research';
-import { renderIssue } from './render';
+import { renderArchive, renderBrand, renderBrands, renderEmpty, renderIssueHome, renderIssueStories, renderStories, renderStory, type Site } from './render';
 import { renderBanner } from './banner';
 import { buildCard, postToTeams } from './card';
 
@@ -45,21 +45,63 @@ export default {
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const admin = isAdmin(req, env, url);
 
-    // 首頁:最新已發布的一期;管理者看最新一期(含草稿)
+    // 管理者帶 ?k= 瀏覽時,站內連結都要帶著 k,才看得到草稿
+    const k = admin ? url.searchParams.get('k') : null;
+    const link = (p: string) => {
+      if (!k) return p;
+      const [base, hash] = p.split('#');
+      return `${base}${base.includes('?') ? '&' : '?'}k=${encodeURIComponent(k)}${hash ? '#' + hash : ''}`;
+    };
+    const site: Site = { siteName: env.SITE_NAME, orgName: env.ORG_NAME, link, admin };
+    const catParam = (): Item['category'] | null => {
+      const c = url.searchParams.get('c');
+      return c && (CATEGORIES as readonly string[]).includes(c) ? (c as Item['category']) : null;
+    };
+    const notFound = (msg: string) => html(`<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">${msg}</p>`, 404);
+    const draftBlocked = () => html('<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">這一期還在草稿,尚未發布。</p>', 403);
+
+    // 首頁:最新一期(一般人看最新已發布的,管理者看最新的草稿)
     if (path === '/') {
-      const row = admin
-        ? await env.DB.prepare('SELECT week FROM issues ORDER BY week DESC LIMIT 1').first<{ week: string }>()
-        : await env.DB.prepare("SELECT week FROM issues WHERE status='published' ORDER BY week DESC LIMIT 1").first<{ week: string }>();
-      if (!row) return html(`<!doctype html><meta charset="utf-8"><title>${env.SITE_NAME}</title><p style="font-family:system-ui;padding:40px">還沒有任何一期。</p>`, 404);
-      return Response.redirect(`${url.origin}/w/${row.week}${admin && url.searchParams.get('k') ? `?k=${url.searchParams.get('k')}` : ''}`, 302);
+      const issues = await listIssues(env, admin);
+      if (!issues.length) return html(renderEmpty(site), 404);
+      const bundle = await loadBundle(env, issues[0].week);
+      return html(renderIssueHome(bundle!, site, issues));
     }
 
     let m: RegExpExecArray | null;
-    if ((m = /^\/w\/(\d{4}-W\d{2})$/.exec(path))) {
+    if ((m = /^\/w\/(\d{4}-W\d{2})(\/stories)?$/.exec(path))) {
       const bundle = await loadBundle(env, m[1]);
-      if (!bundle) return html('<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">沒有這一期。</p>', 404);
-      if (bundle.issue.status !== 'published' && !admin) return html('<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">這一期還在草稿,尚未發布。</p>', 403);
-      return html(renderIssue(bundle, { siteName: env.SITE_NAME, orgName: env.ORG_NAME, brandCount: bundle.brands.length }));
+      if (!bundle) return notFound('沒有這一期。');
+      if (bundle.issue.status !== 'published' && !admin) return draftBlocked();
+      const issues = await listIssues(env, admin);
+      return html(m[2] ? renderIssueStories(bundle, site, issues, catParam()) : renderIssueHome(bundle, site, issues));
+    }
+    if (path === '/w') return html(renderArchive(await listIssues(env, admin), site));
+    if ((m = /^\/s\/([\w-]+)$/.exec(path))) {
+      const week = await weekOfItem(env, m[1]);
+      const bundle = week ? await loadBundle(env, week) : null;
+      const it = bundle?.items.find(i => i.id === m![1]);
+      if (!bundle || !it) return notFound('找不到這則動態。');
+      if (bundle.issue.status !== 'published' && !admin) return draftBlocked();
+      return html(renderStory(bundle, it, site));
+    }
+    if (path === '/c' || (m = /^\/c\/(new_product|campaign|loyalty)$/.exec(path))) {
+      const cat = path === '/c' ? null : (m![1] as Item['category']);
+      const [bundle, brands, issues] = await Promise.all([
+        cat ? loadItems(env, admin, 't.category = ?', [cat]) : loadItems(env, admin, '1 = 1', []),
+        allBrands(env), listIssues(env, admin)]);
+      return html(renderStories(bundle, brands, site, issues, cat));
+    }
+    if (path === '/b') {
+      const [brands, stats] = await Promise.all([allBrands(env), brandStats(env, admin)]);
+      return html(renderBrands(brands, stats, site));
+    }
+    if ((m = /^\/b\/([a-z0-9-]+)$/.exec(path))) {
+      const brands = await allBrands(env);
+      const br = brands.find(b => b.id === m![1]);
+      if (!br) return notFound('沒有這個品牌。');
+      const bundle = await loadItems(env, admin, 't.brand_id = ?', [br.id]);
+      return html(renderBrand(br, bundle, brands, site, catParam()));
     }
     if ((m = /^\/api\/(\d{4}-W\d{2})\.json$/.exec(path))) {
       const bundle = await loadBundle(env, m[1]);

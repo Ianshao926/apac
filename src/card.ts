@@ -37,7 +37,7 @@ export function buildCard(b: IssueBundle, origin: string) {
     return {
       type: 'ColumnSet', separator: true, spacing: 'Medium',
       columns: [
-        { type: 'Column', width: '72px', items: [{ type: 'Image', url: `${origin}/img/${img.kv_key}`, size: 'Medium', style: 'Default', altText: it.title, selectAction: { type: 'Action.OpenUrl', url: `${weekUrl}#${it.id}` } }] },
+        { type: 'Column', width: '72px', items: [{ type: 'Image', url: `${origin}/img/${img.kv_key}`, size: 'Medium', style: 'Default', altText: it.title, selectAction: { type: 'Action.OpenUrl', url: `${origin}/s/${it.id}` } }] },
         { type: 'Column', width: 'stretch', items: text },
       ],
     };
@@ -56,7 +56,7 @@ export function buildCard(b: IssueBundle, origin: string) {
     ],
     actions: [
       { type: 'Action.OpenUrl', title: '看完整週報', url: weekUrl },
-      { type: 'Action.OpenUrl', title: '報紙版', url: weekUrl },
+      { type: 'Action.OpenUrl', title: '本期全部動態', url: `${weekUrl}/stories` },
     ],
   };
 }
