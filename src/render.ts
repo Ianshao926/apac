@@ -24,10 +24,12 @@ const wlabel = (w: string) => `Week ${wnum(w)}`;
 const pad2 = (n: number | null | undefined) => String(n ?? 1).padStart(2, '0');
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const enName = (b: Brand | undefined, fallback = '') => (b ? (b.name_en || b.name_zh) : fallback);
+/** 中文說明裡的日期用台灣常見的寫法:10/13起、10/16–10/18、至10/31 */
+function zhDate(x: string | null | undefined) { const p = parts(x); return p ? `${p.m}/${p.d}` : ''; }
 function itemDates(it: Item) {
-  if (it.date_start && it.date_end) return `${dShort(it.date_start)} – ${dShort(it.date_end)}`;
-  if (it.date_start) return `${dShort(it.date_start)} 起`;
-  if (it.date_end) return `至 ${dShort(it.date_end)}`;
+  if (it.date_start && it.date_end) return `${zhDate(it.date_start)}–${zhDate(it.date_end)}`;
+  if (it.date_start) return `${zhDate(it.date_start)}起`;
+  if (it.date_end) return `至${zhDate(it.date_end)}`;
   return '';
 }
 
@@ -191,14 +193,14 @@ function page(s: Site, o: { title: string; body: string; draft?: string | null; 
 <div class="menu" id="menu">${nav}</div>
 <main>${o.body}</main>
 ${footer(s)}
-${o.draft ? `<div class="draftbar"><span>草稿預覽:這一期還沒發布,只有帶管理金鑰的人看得到。</span><span>${esc(wlabel(o.draft))}</span></div>` : ''}
+${o.draft ? `<div class="draftbar"><span>草稿預覽：這一期還沒發布，只有帶管理金鑰的人看得到。</span><span>${esc(wlabel(o.draft))}</span></div>` : ''}
 ${SCRIPT}</body></html>`;
 }
 
 function footer(s: Site): string {
   const L = s.link;
   return `<footer class="foot"><div class="ft"><h2>APAC Radar</h2><p>A weekly read on tea brands across Asia Pacific</p></div>
-<p class="about">每週一早上,系統替 17 個茶飲品牌整理上一週的<b>新品</b>、<b>行銷檔期</b>與<b>會員經營</b>動態。每則都附來源;標示<b>已佐證</b>代表至少兩個獨立來源說法一致,<b>單一來源</b>的請先看、別轉述。圖片以品牌官方素材優先,其次是報導配圖,都標出處。</p>
+<p class="about">每週一早上，系統替17個茶飲品牌整理上一週的<b>新品</b>、<b>行銷檔期</b>與<b>會員經營</b>動態。每則都附來源；標示<b>已佐證</b>代表至少兩個獨立來源說法一致，<b>單一來源</b>的請先看、別轉述。圖片以品牌官方素材優先，其次是報導配圖，都標出處。</p>
 <div class="bot"><span>${esc(s.orgName)}</span><nav><a href="${esc(L('/'))}">This Week</a><a href="${esc(L('/w'))}">All Issues</a><a href="${esc(L('/c'))}">All Stories</a><a href="${esc(L('/b'))}">Brands</a></nav><span>Internal use only</span></div></footer>`;
 }
 
@@ -237,7 +239,7 @@ function coverBlock(issue: { week: string; no: number | null; range_start: strin
 function issueSelect(s: Site, issues: IssueSummary[], current: string | null, suffix: string, allLabel?: string) {
   const opts = [
     ...(allLabel ? [`<option value="${esc(s.link('/c' + suffix))}"${current ? '' : ' selected'}>${esc(allLabel)}</option>`] : []),
-    ...issues.map(i => `<option value="${esc(s.link(`/w/${i.week}/stories${suffix ? '?c=' + suffix.slice(1) : ''}`))}"${i.week === current ? ' selected' : ''}>${esc(wlabel(i.week))}${i.status === 'published' ? '' : '(草稿)'}</option>`),
+    ...issues.map(i => `<option value="${esc(s.link(`/w/${i.week}/stories${suffix ? '?c=' + suffix.slice(1) : ''}`))}"${i.week === current ? ' selected' : ''}>${esc(wlabel(i.week))}${i.status === 'published' ? '' : '（草稿）'}</option>`),
   ];
   return `<label class="sel"><span class="vh" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">選擇期數</span><select data-go>${opts.join('')}</select>${CHEVRON}</label>`;
 }
@@ -313,7 +315,7 @@ function storyBlock(c: Ctx, b: IssueBundle, it: Item, i: number) {
 <h3><a href="${esc(storyHref(c, it))}">${esc(it.title)}</a></h3><p class="lb when">${esc(meta)}</p>
 <p class="sum">${esc(it.summary)}</p>
 ${it.observation ? `<div class="why"><h4>Why it matters</h4><p>${esc(it.observation)}</p></div>` : ''}
-<p class="lb src">${it.confidence === 'verified' ? '已佐證' : '單一來源'}${links ? ' · 來源:' + links : ''}</p></div></article>`;
+<p class="lb src">${it.confidence === 'verified' ? '已佐證' : '單一來源'}${links ? ' · 來源：' + links : ''}</p></div></article>`;
 }
 
 // ---------- 每期統整文章 ----------
@@ -382,12 +384,12 @@ export function renderStories(bundle: ItemsBundle, brands: Brand[], s: Site, iss
   const c = ctxOf(s, brands, bundle.images);
   const intro: Record<Cat, string> = {
     new_product: '新飲品、季節系列、菜單改版、品項下架與價格調整。',
-    campaign: '聯名、快閃、促銷、節慶活動、名人合作,以及開幕檔期的促銷機制。',
-    loyalty: 'App 改版、點數與等級規則、訂閱制、生日禮與入會禮、會員專屬活動,以及公開揭露的會員數字。',
+    campaign: '聯名、快閃、促銷、節慶活動、名人合作，以及開幕檔期的促銷機制。',
+    loyalty: 'App改版、點數與等級規則、訂閱制、生日禮與入會禮、會員專屬活動，以及公開揭露的會員數字。',
   };
   const body = `<section class="phd">${issueSelect(s, issues, null, cat ? '/' + cat : '', 'All Issues')}
 ${filterLine({ all: L('/c'), cat: x => L('/c/' + x) }, cat)}
-${cat ? `<p class="p">${esc(intro[cat])}</p>` : `<p class="p">每一期收錄的全部動態,新的在前。</p>`}</section>
+${cat ? `<p class="p">${esc(intro[cat])}</p>` : `<p class="p">每一期收錄的全部動態，新的在前。</p>`}</section>
 <div class="hr"></div>
 ${bundle.items.length ? `<div class="grid">${bundle.items.map(i => card(c, i, 'cross')).join('')}</div>` : `<p class="empty">目前還沒有${cat ? CATEGORY_ZH[cat] + '的' : ''}動態。</p>`}
 <div class="viewing"><a href="${esc(L('/c'))}">Stories</a><span>Viewing: ${cat ? CATEGORY_EN[cat] : 'All'} (${bundle.items.length})</span><a href="${esc(L('/b'))}">Brands</a></div>`;
@@ -414,7 +416,7 @@ export function renderBrands(brands: Brand[], stats: BrandStat[], s: Site): stri
       return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${mark(br.id, br, 'mkM')}<span>${esc(enName(br))}<small>${esc(br.name_zh)}</small></span></span><span class="lb">${esc(mk.join(' · '))}</span><span class="lb c">${x ? `${x.items} ${x.items === 1 ? 'story' : 'stories'}<br>Latest ${esc(wlabel(x.last_week ?? ''))}` : 'No stories yet'}</span></a>`;
     }).join('')}</section>`;
   }).join('');
-  const body = `<section class="phd"><h1>Brands</h1><p class="p">我們每週追蹤的 ${brands.length} 個茶飲品牌。點品牌可以看它歷來的所有動態。</p></section>${sections}`;
+  const body = `<section class="phd"><h1>Brands</h1><p class="p">我們每週追蹤的${brands.length}個茶飲品牌。點品牌可以看它歷來的所有動態。</p></section>${sections}`;
   return page(s, { title: 'Brands · APAC Radar', body });
 }
 
@@ -429,7 +431,7 @@ export function renderBrand(br: Brand, bundle: ItemsBundle, brands: Brand[], s: 
 <p class="lb">${esc(mk.join(' · '))}${tier ? ' · ' + tier[1] : ''}</p><p class="p">${esc(br.focus)}</p>
 ${filterLine({ all: L('/b/' + br.id), cat: x => L(`/b/${br.id}?c=${x}`) }, cat)}</section>
 <div class="hr"></div>
-${list.length ? `<div class="grid">${list.map(i => card(c, i, 'cross')).join('')}</div>` : `<p class="empty">目前收錄的期數裡,${esc(br.name_zh)}還沒有${cat ? CATEGORY_ZH[cat] + '的' : '符合條件的'}動態。</p>`}
+${list.length ? `<div class="grid">${list.map(i => card(c, i, 'cross')).join('')}</div>` : `<p class="empty">目前收錄的期數裡，${esc(br.name_zh)}還沒有${cat ? CATEGORY_ZH[cat] + '的' : '符合條件的'}動態。</p>`}
 <div class="viewing"><a href="${esc(L('/b'))}">Brands</a><span>Viewing: ${esc(enName(br))} (${list.length})</span><a href="${esc(L('/c'))}">All Stories</a></div>`;
   return page(s, { title: `${enName(br)} ${br.name_zh} · APAC Radar`, body });
 }
@@ -453,7 +455,7 @@ export function renderStory(b: IssueBundle, it: Item, s: Site): string {
     ['期間', itemDates(it) || '未標示'],
     ['狀態', it.status_note || ''],
     ['市場', it.market],
-    ['可信度', verified ? '已佐證:至少兩個獨立來源說法一致' : '單一來源:只找到一個來源,先看、別轉述'],
+    ['可信度', verified ? '已佐證：至少兩個獨立來源說法一致' : '單一來源：只找到一個來源，先看、別轉述'],
   ].filter(f => f[1]).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
   const srcList = srcs.length ? `<div><dt>來源</dt><dd><ol>${srcs.map(x => { const u = safeUrl(x.url); const t = `${x.publisher || host(x.url)}${x.title ? ',' + x.title : ''}${x.published_at ? ',' + x.published_at : ''}`; return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t)}</li>`; }).join('')}</ol></dd></div>` : '';
 
@@ -474,5 +476,5 @@ ${others.length ? `<section class="band"><div class="bh"><h2>More from ${esc(wla
 
 /** 沒有任何一期時的首頁 */
 export function renderEmpty(s: Site): string {
-  return page(s, { title: 'APAC Radar', body: `<section class="phd"><h1>Coming Soon</h1><p class="p">第一期還沒發布。每週一早上整理好之後,這裡會出現最新一期。</p></section>` });
+  return page(s, { title: 'APAC Radar', body: `<section class="phd"><h1>Coming Soon</h1><p class="p">第一期還沒發布。每週一早上整理好之後，這裡會出現最新一期。</p></section>` });
 }

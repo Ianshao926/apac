@@ -1,5 +1,6 @@
 import type { Brand, BrandStat, Env, Issue, IssueBundle, IssueSummary, Item, ItemImage, ItemSource, ItemsBundle } from './types';
 import { parseWeekId, previousWeeks, weekRange } from './week';
+import { twText } from './zh';
 import type { BrandReport } from './schema';
 import { heroImageOf, storeImages, type Candidate } from './images';
 
@@ -70,7 +71,10 @@ export async function saveReport(env: Env, week: string, brand: Brand, report: B
   const stats: SaveStats = { inserted: 0, skipped: 0, images: 0 };
   const stmts: D1PreparedStatement[] = [];
 
-  for (const it of report.items) {
+  for (const raw of report.items) {
+    // 存檔前統一成台灣繁體中文的寫法(全形標點、台灣用語),見 zh.ts
+    const it = { ...raw, title: twText(raw.title), summary: twText(raw.summary), market: twText(raw.market),
+      observation: twText(raw.observation) ?? null, status_note: twText(raw.status_note) ?? null };
     const dupUrl = it.sources.some(s => seenUrls.has(s.url));
     const dupTitle = seenTitles.some(t => similar(t, it.title) >= 0.7);
     if (dupUrl || dupTitle) { stats.skipped++; continue; }

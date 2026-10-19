@@ -26,7 +26,7 @@ export function buildCard(b: IssueBundle, origin: string) {
   const itemBlock = (it: Item) => {
     const img = b.images[it.id]?.[0];
     const src = b.sources[it.id] ?? [];
-    const conf = it.confidence === 'verified' ? `${src.length} sources,已佐證` : '1 source,待佐證';
+    const conf = it.confidence === 'verified' ? `${src.length} 個來源，已佐證` : '單一來源，先看、別轉述';
     const text = [
       { type: 'TextBlock', text: `**${brandName(it.brand_id)}** · ${it.market} · ${CATEGORY_SHORT[it.category]}`, size: 'Small', isSubtle: true, wrap: true, spacing: 'None' },
       { type: 'TextBlock', text: it.title, weight: 'Bolder', wrap: true, spacing: 'Small' },
@@ -49,10 +49,10 @@ export function buildCard(b: IssueBundle, origin: string) {
     msteams: { width: 'Full' },
     body: [
       { type: 'Image', url: `${origin}/banner/${issue.week}.png`, altText: `W${issue.week.slice(-2)} 亞太競品週報`, selectAction: { type: 'Action.OpenUrl', url: weekUrl } },
-      { type: 'TextBlock', wrap: true, text: `本週 **${active}** 個品牌有動態:新品 **${counts.new_product}** 則、行銷 **${counts.campaign}** 則、會員 **${counts.loyalty}** 則。` },
-      { type: 'TextBlock', wrap: true, size: 'Small', isSubtle: true, spacing: 'None', text: `三則重點,各類別取一;完整 ${b.items.length} 則在網站版。` },
+      { type: 'TextBlock', wrap: true, text: `本週 **${active}** 個品牌有動態：新品 **${counts.new_product}** 則、行銷 **${counts.campaign}** 則、會員 **${counts.loyalty}** 則。` },
+      { type: 'TextBlock', wrap: true, size: 'Small', isSubtle: true, spacing: 'None', text: `三則重點，各類別取一則；完整 ${b.items.length} 則在網站上。` },
       ...hl.map(itemBlock),
-      { type: 'TextBlock', wrap: true, size: 'Small', isSubtle: true, separator: true, spacing: 'Medium', text: `**本週安靜 ${b.quiet.length} 個:**${quietNames || '無'}。` },
+      { type: 'TextBlock', wrap: true, size: 'Small', isSubtle: true, separator: true, spacing: 'Medium', text: `**本週安靜 ${b.quiet.length} 個：**${quietNames || '無'}。` },
     ],
     actions: [
       { type: 'Action.OpenUrl', title: '看完整週報', url: weekUrl },

@@ -59,7 +59,7 @@ export default {
       return c && (CATEGORIES as readonly string[]).includes(c) ? (c as Item['category']) : null;
     };
     const notFound = (msg: string) => html(`<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">${msg}</p>`, 404);
-    const draftBlocked = () => html('<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">這一期還在草稿,尚未發布。</p>', 403);
+    const draftBlocked = () => html('<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:40px">這一期還在草稿，尚未發布。</p>', 403);
 
     // 首頁:最新一期(一般人看最新已發布的,管理者看最新的草稿)
     if (path === '/') {
