@@ -1,6 +1,6 @@
-import type { Env } from './types';
+import type { Brand, Env } from './types';
 import { targetWeekFor, parseWeekId } from './week';
-import { allBrands, ensureIssue, getIssue, loadBundle, pendingBrands, recordRun, saveReport } from './db';
+import { allBrands, claimRun, ensureIssue, getIssue, loadBundle, pendingBrands, recordRun, saveReport } from './db';
 import { researchBrand } from './research';
 import { renderIssue } from './render';
 import { renderBanner } from './banner';
@@ -18,8 +18,14 @@ function isAdmin(req: Request, env: Env, url: URL) {
 async function runOneBrand(env: Env, week: string, brandId?: string) {
   const issue = await ensureIssue(env, week);
   const pending = await pendingBrands(env, week);
-  const brand = brandId ? (await allBrands(env)).find(b => b.id === brandId) : pending[0];
-  if (!brand) return { week, done: true, message: 'nothing pending' };
+  let brand: Brand | undefined;
+  if (brandId) {
+    // 手動指定品牌:直接跑,不看認領狀態
+    brand = (await allBrands(env)).find(b => b.id === brandId);
+  } else {
+    for (const b of pending) if (await claimRun(env, week, b.id)) { brand = b; break; }
+  }
+  if (!brand) return { week, done: true, message: brandId ? 'unknown brand' : 'nothing pending' };
   const t0 = Date.now();
   try {
     const r = await researchBrand(env, brand, week, issue.range_start, issue.range_end);
@@ -134,7 +140,7 @@ export default {
     return new Response('not found', { status: 404 });
   },
 
-  // 每週一 UTC 00:00–02:50,每 10 分鐘一格,一格一個品牌
+  // 每週一 UTC 00:00–00:58(台北 08:00–08:58),每 2 分鐘一格,一格認領一個品牌
   async scheduled(_ev: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const week = targetWeekFor();
     const n = Math.max(1, Number(env.BRANDS_PER_BATCH || '1'));

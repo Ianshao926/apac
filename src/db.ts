@@ -20,18 +20,30 @@ export async function ensureIssue(env: Env, week: string): Promise<Issue> {
   const { start, end } = weekRange(p.year, p.week);
   const count = await env.DB.prepare('SELECT COUNT(*) AS c FROM issues').first<{ c: number }>();
   const no = (count?.c ?? 0) + 1;
-  await env.DB.prepare('INSERT INTO issues (week,no,range_start,range_end,status) VALUES (?,?,?,?,?)').bind(week, no, start, end, 'draft').run();
+  await env.DB.prepare('INSERT OR IGNORE INTO issues (week,no,range_start,range_end,status) VALUES (?,?,?,?,?)').bind(week, no, start, end, 'draft').run();
   return (await getIssue(env, week))!;
 }
 
-/** 這一週還沒跑過的品牌(沒有 runs 列,或上次是 error) */
+// 一個品牌最久跑多久(SDK timeout 9 分鐘)。認領超過這個時間還沒結束,就當作中斷,可以重新認領。
+const STALE = "datetime('now','-15 minutes')";
+
+/** 這一週還沒跑過的品牌(沒有 runs 列、上次是 error,或認領後中斷) */
 export async function pendingBrands(env: Env, week: string): Promise<Brand[]> {
   const r = await env.DB.prepare(
     `SELECT b.* FROM brands b
      LEFT JOIN runs r ON r.brand_id=b.id AND r.week=?
-     WHERE b.active=1 AND (r.id IS NULL OR r.status='error')
+     WHERE b.active=1 AND (r.id IS NULL OR r.status='error' OR (r.status='running' AND r.started_at < ${STALE}))
      ORDER BY b.sort`).bind(week).all<Brand>();
   return r.results;
+}
+
+/** 認領一個品牌。排程每 2 分鐘起跑一次,前一個還沒跑完時,靠這一步避免兩次執行跑到同一個品牌。 */
+export async function claimRun(env: Env, week: string, brandId: string): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `INSERT INTO runs (week,brand_id,status) VALUES (?,?,'running')
+     ON CONFLICT(week,brand_id) DO UPDATE SET status='running', started_at=datetime('now'), finished_at=NULL
+     WHERE runs.status='error' OR (runs.status='running' AND runs.started_at < ${STALE})`).bind(week, brandId).run();
+  return (r.meta.changes ?? 0) > 0;
 }
 
 function norm(s: string) { return s.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''); }
