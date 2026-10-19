@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument sans",
+        "createdAt": "2026-10-19T06:40:29.846Z",
+        "reason": "Claude's call: sans is used only for 13-15px labels to match the neutral label grotesk on kinfolk.com (the user's chosen reference); the site's character comes from the Newsreader/Noto Serif TC headlines"
+      }
+    ]
+  }
+}
