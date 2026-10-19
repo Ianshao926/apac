@@ -38,7 +38,7 @@ export function pickLead(items: Item[], images: Record<string, ItemImage[]>): It
 // ---------- 樣式 ----------
 const CSS = `
 :root{--paper:#fff;--ink:#000;--mute:#6b6b6b;--faint:#8a8a8a;--hair:#e2e2e2;--sage:#dcded5;--ph:#efefec;--g:clamp(16px,2.4vw,34px);
---serif:"Newsreader","Noto Serif TC","Songti TC",Georgia,serif;--zh:"Noto Serif TC","Songti TC","PMingLiU",serif;--sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+--serif:"Newsreader","Noto Serif TC","Songti TC",Georgia,serif;--zh:"Noto Serif TC","Songti TC","PMingLiU",serif;--sans:"Instrument Sans","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
 *{box-sizing:border-box;min-width:0}html{-webkit-text-size-adjust:100%}html,body{overflow-x:clip}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased;font-optical-sizing:auto}
 a{color:inherit;text-decoration:none}p{margin:0}h1,h2,h3{margin:0;font-weight:400}img{display:block;max-width:100%}ol,ul{list-style:none;margin:0;padding:0}
@@ -146,7 +146,7 @@ a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 .menu nav{grid-template-columns:minmax(0,1fr)}.viewing{grid-template-columns:1fr 1fr}.viewing>:nth-child(2){display:none}.dek,.meta,.body{padding-top:56px}.foot .bot{flex-direction:column}}
 `;
 
-const FONTS = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;600&display=swap';
+const FONTS = 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;600&display=swap';
 const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>';
 const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
 
