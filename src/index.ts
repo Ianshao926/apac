@@ -124,9 +124,8 @@ export default {
     if ((m = /^\/banner\/(\d{4}-W\d{2})\.png$/.exec(path))) {
       const issue = await getIssue(env, m[1]);
       if (!issue) return new Response('not found', { status: 404 });
-      const brands = await allBrands(env);
-      const active = await env.DB.prepare('SELECT COUNT(DISTINCT brand_id) AS c FROM items WHERE week=? AND hidden=0').bind(m[1]).first<{ c: number }>();
-      const png = await renderBanner(env, issue, active?.c ?? 0, brands.length);
+      const n = await env.DB.prepare('SELECT COUNT(*) AS n, COUNT(DISTINCT brand_id) AS c FROM items WHERE week=? AND hidden=0').bind(m[1]).first<{ n: number; c: number }>();
+      const png = await renderBanner(env, issue, n?.n ?? 0, n?.c ?? 0);
       return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=600' } });
     }
     if ((m = /^\/card\/(\d{4}-W\d{2})\.json$/.exec(path)) && admin) {
