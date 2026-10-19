@@ -37,7 +37,7 @@ export function buildCard(b: IssueBundle, origin: string) {
     return {
       type: 'ColumnSet', separator: true, spacing: 'Medium',
       columns: [
-        { type: 'Column', width: '72px', items: [{ type: 'Image', url: `${origin}/img/${img.kv_key}`, size: 'Medium', style: 'Default', altText: it.title, selectAction: { type: 'Action.OpenUrl', url: `${origin}/s/${it.id}` } }] },
+        { type: 'Column', width: '72px', items: [{ type: 'Image', url: `${origin}/img/${img.kv_key.replace(/^img\//, '')}`, size: 'Medium', style: 'Default', altText: it.title, selectAction: { type: 'Action.OpenUrl', url: `${origin}/s/${it.id}` } }] },
         { type: 'Column', width: 'stretch', items: text },
       ],
     };
