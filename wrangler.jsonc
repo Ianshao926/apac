@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "apac-radar",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // 每週一 UTC 00:00–02:50 每 10 分鐘跑一個品牌(18 格,17 個品牌),台北 08:00–10:50。免費方案每次呼叫只有 50 個子請求,所以一次一個品牌。
+  // 09:00 台北的推送不自動,等 Ian 看過預覽後用 /admin/publish 觸發。
+  "triggers": { "crons": ["*/10 0-2 * * 1"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "apac-radar", "database_id": "31b3db0f-a4ba-4ffa-9bfc-1b5b546e6a22", "migrations_dir": "migrations" }
+  ],
+  "kv_namespaces": [
+    { "binding": "IMG", "id": "5db74e2821cc4692b3cb4af06ce42058" }
+  ],
+  "rules": [
+    { "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }
+  ],
+  "vars": {
+    "SITE_NAME": "亞太競品雷達",
+    "ORG_NAME": "吃茶三千 亞太暨國際發展事業部",
+    "BRANDS_PER_BATCH": "1",
+    "MODEL": "claude-opus-5-5"
+  }
+}
