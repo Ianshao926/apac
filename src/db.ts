@@ -1,4 +1,4 @@
-import type { Brand, Env, Issue, IssueBundle, Item, ItemImage, ItemSource } from './types';
+import type { Brand, BrandStat, Env, Issue, IssueBundle, IssueSummary, Item, ItemImage, ItemSource, ItemsBundle } from './types';
 import { parseWeekId, previousWeeks, weekRange } from './week';
 import type { BrandReport } from './schema';
 import { heroImageOf, storeImages, type Candidate } from './images';
@@ -125,16 +125,7 @@ export async function loadBundle(env: Env, week: string): Promise<IssueBundle | 
   if (!issue) return null;
   const brands = await allBrands(env);
   const items = (await env.DB.prepare('SELECT * FROM items WHERE week=? AND hidden=0 ORDER BY is_lead DESC, rank, created_at').bind(week).all<Item>()).results;
-  const ids = items.map(i => i.id);
-  const sources: Record<string, ItemSource[]> = {};
-  const images: Record<string, ItemImage[]> = {};
-  if (ids.length) {
-    const q = ids.map(() => '?').join(',');
-    for (const s of (await env.DB.prepare(`SELECT * FROM item_sources WHERE item_id IN (${q}) ORDER BY is_official DESC, id`).bind(...ids).all<ItemSource>()).results)
-      (sources[s.item_id] ??= []).push(s);
-    for (const im of (await env.DB.prepare(`SELECT * FROM item_images WHERE item_id IN (${q}) ORDER BY sort`).bind(...ids).all<ItemImage>()).results)
-      (images[im.item_id] ??= []).push(im);
-  }
+  const { sources, images } = await attach(env, items.map(i => i.id));
   const weeks8 = previousWeeks(week, 8);
   const act = (await env.DB.prepare(`SELECT DISTINCT brand_id, week FROM items WHERE hidden=0 AND week IN (${weeks8.map(() => '?').join(',')})`).bind(...weeks8).all<{ brand_id: string; week: string }>()).results;
   const activity: Record<string, string[]> = {};
@@ -143,4 +134,52 @@ export async function loadBundle(env: Env, week: string): Promise<IssueBundle | 
   const activeBrandIds = new Set(items.map(i => i.brand_id));
   const quiet = brands.filter(b => !activeBrandIds.has(b.id));
   return { issue, brands, items, sources, images, activity, weeks8, quiet, runs };
+}
+
+/** 一次撈多則動態的來源與圖片。D1 一次查詢最多 100 個參數,所以分批。 */
+async function attach(env: Env, ids: string[]) {
+  const sources: Record<string, ItemSource[]> = {};
+  const images: Record<string, ItemImage[]> = {};
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const q = chunk.map(() => '?').join(',');
+    for (const s of (await env.DB.prepare(`SELECT * FROM item_sources WHERE item_id IN (${q}) ORDER BY is_official DESC, id`).bind(...chunk).all<ItemSource>()).results)
+      (sources[s.item_id] ??= []).push(s);
+    for (const im of (await env.DB.prepare(`SELECT * FROM item_images WHERE item_id IN (${q}) ORDER BY sort`).bind(...chunk).all<ItemImage>()).results)
+      (images[im.item_id] ??= []).push(im);
+  }
+  return { sources, images };
+}
+
+// 頭條的選法要跟週報頁一致:指定頭條優先,其次有圖、rank 低、較早寫入的
+const LEAD_ORDER = `ORDER BY t.is_lead DESC, (CASE WHEN EXISTS (SELECT 1 FROM item_images m WHERE m.item_id=t.id) THEN 0 ELSE 100 END) + t.rank, t.created_at LIMIT 1`;
+
+/** 所有期數,新的在前。drafts=false 時只列已發布的。 */
+export async function listIssues(env: Env, drafts: boolean): Promise<IssueSummary[]> {
+  const r = await env.DB.prepare(
+    `SELECT i.*,
+       (SELECT COUNT(*) FROM items t WHERE t.week=i.week AND t.hidden=0) AS items,
+       (SELECT COUNT(DISTINCT t.brand_id) FROM items t WHERE t.week=i.week AND t.hidden=0) AS brands,
+       (SELECT t.title FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_title,
+       (SELECT t.brand_id FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_brand
+     FROM issues i WHERE (? = 1 OR i.status='published') ORDER BY i.week DESC`).bind(drafts ? 1 : 0).all<IssueSummary>();
+  return r.results;
+}
+
+/** 跨期撈動態(品牌頁、分類頁)。where 只能是程式內寫死的條件,值一律用 binds 帶。 */
+export async function loadItems(env: Env, drafts: boolean, where: string, binds: (string | number)[]): Promise<ItemsBundle> {
+  const items = (await env.DB.prepare(
+    `SELECT t.* FROM items t JOIN issues i ON i.week=t.week
+     WHERE t.hidden=0 AND (? = 1 OR i.status='published') AND (${where})
+     ORDER BY t.week DESC, t.is_lead DESC, t.rank, t.created_at`).bind(drafts ? 1 : 0, ...binds).all<Item>()).results;
+  return { items, ...(await attach(env, items.map(i => i.id))) };
+}
+
+/** 每個品牌累計幾則、出現在幾期、最近一次是哪一期 */
+export async function brandStats(env: Env, drafts: boolean): Promise<BrandStat[]> {
+  const r = await env.DB.prepare(
+    `SELECT t.brand_id, COUNT(*) AS items, COUNT(DISTINCT t.week) AS weeks, MAX(t.week) AS last_week
+     FROM items t JOIN issues i ON i.week=t.week
+     WHERE t.hidden=0 AND (? = 1 OR i.status='published') GROUP BY t.brand_id`).bind(drafts ? 1 : 0).all<BrandStat>();
+  return r.results;
 }

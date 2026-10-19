@@ -96,3 +96,27 @@ export const CATEGORY_SHORT: Record<Item['category'], string> = {
   campaign: '行銷',
   loyalty: '會員',
 };
+
+/** 往期列表用:每一期的摘要 */
+export interface IssueSummary extends Issue {
+  items: number;
+  brands: number;
+  lead_title: string | null;
+  lead_brand: string | null;
+}
+
+/** 跨期頁面(品牌頁、分類頁)用的一組動態 */
+export interface ItemsBundle {
+  items: Item[];
+  sources: Record<string, ItemSource[]>;
+  images: Record<string, ItemImage[]>;
+}
+
+export interface BrandStat { brand_id: string; items: number; weeks: number; last_week: string | null }
+
+export const CATEGORY_EN: Record<Item['category'], string> = {
+  new_product: 'New Products',
+  campaign: 'Campaigns',
+  loyalty: 'Loyalty',
+};
+export const CATEGORIES = ['new_product', 'campaign', 'loyalty'] as const;
