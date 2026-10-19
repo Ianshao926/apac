@@ -152,7 +152,9 @@ async function attach(env: Env, ids: string[]) {
 }
 
 // 頭條的選法要跟週報頁一致:指定頭條優先,其次有圖、rank 低、較早寫入的
-const LEAD_ORDER = `ORDER BY t.is_lead DESC, (CASE WHEN EXISTS (SELECT 1 FROM item_images m WHERE m.item_id=t.id) THEN 0 ELSE 100 END) + t.rank, t.created_at LIMIT 1`;
+// 只有小圖(最大一張 < 150KB)的動態扣分,避免頭條大圖被硬放大
+const LEAD_ORDER = `ORDER BY t.is_lead DESC, (CASE WHEN EXISTS (SELECT 1 FROM item_images m WHERE m.item_id=t.id) THEN 0 ELSE 100 END)
+  + (CASE WHEN COALESCE((SELECT MAX(m.bytes) FROM item_images m WHERE m.item_id=t.id), 0) < 150000 THEN 30 ELSE 0 END) + t.rank, t.created_at LIMIT 1`;
 
 /** 所有期數,新的在前。drafts=false 時只列已發布的。 */
 export async function listIssues(env: Env, drafts: boolean): Promise<IssueSummary[]> {
@@ -163,7 +165,7 @@ export async function listIssues(env: Env, drafts: boolean): Promise<IssueSummar
        (SELECT t.title FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_title,
        (SELECT t.brand_id FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_brand,
        (SELECT m.kv_key FROM items t JOIN item_images m ON m.item_id=t.id WHERE t.week=i.week AND t.hidden=0
-          ORDER BY t.is_lead DESC, t.rank, t.created_at, m.sort LIMIT 1) AS cover_key
+          ORDER BY m.bytes DESC LIMIT 1) AS cover_key
      FROM issues i WHERE (? = 1 OR i.status='published') ORDER BY i.week DESC`).bind(drafts ? 1 : 0).all<IssueSummary>();
   return r.results;
 }

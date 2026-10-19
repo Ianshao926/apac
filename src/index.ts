@@ -2,7 +2,7 @@ import { CATEGORIES, type Brand, type Env, type Item } from './types';
 import { targetWeekFor, parseWeekId } from './week';
 import { allBrands, brandStats, claimRun, ensureIssue, getIssue, listIssues, loadBundle, loadItems, pendingBrands, recordRun, saveReport, weekOfItem } from './db';
 import { researchBrand } from './research';
-import { renderArchive, renderBrand, renderBrands, renderEmpty, renderIssueHome, renderIssueStories, renderStories, renderStory, type Site } from './render';
+import { renderArchive, renderBrand, renderBrands, renderEmpty, renderHome, renderIssue, renderIssueStories, renderStories, renderStory, type Site } from './render';
 import { renderBanner } from './banner';
 import { buildCard, postToTeams } from './card';
 import { LOGOS } from './logos';
@@ -66,7 +66,7 @@ export default {
       const issues = await listIssues(env, admin);
       if (!issues.length) return html(renderEmpty(site), 404);
       const bundle = await loadBundle(env, issues[0].week);
-      return html(renderIssueHome(bundle!, site, issues));
+      return html(renderHome(bundle!, site, issues));
     }
 
     let m: RegExpExecArray | null;
@@ -75,7 +75,7 @@ export default {
       if (!bundle) return notFound('沒有這一期。');
       if (bundle.issue.status !== 'published' && !admin) return draftBlocked();
       const issues = await listIssues(env, admin);
-      return html(m[2] ? renderIssueStories(bundle, site, issues, catParam()) : renderIssueHome(bundle, site, issues));
+      return html(m[2] ? renderIssueStories(bundle, site, issues, catParam()) : renderIssue(bundle, site, issues));
     }
     if (path === '/w') return html(renderArchive(await listIssues(env, admin), site));
     if ((m = /^\/s\/([\w-]+)$/.exec(path))) {

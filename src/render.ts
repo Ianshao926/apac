@@ -33,8 +33,12 @@ function itemDates(it: Item) {
 
 /** 頭條:指定頭條優先,其次有圖、rank 低、較早寫入的(listIssues 的 SQL 用同一套規則) */
 export function pickLead(items: Item[], images: Record<string, ItemImage[]>): Item | undefined {
-  return items.find(i => i.is_lead) ?? items.slice().sort((a, c) => ((images[a.id]?.length ? 0 : 100) + a.rank) - ((images[c.id]?.length ? 0 : 100) + c.rank))[0];
+  const score = (i: Item) => (images[i.id]?.length ? 0 : 100) + (maxBytes(images[i.id]) < 150000 ? 30 : 0) + i.rank;
+  return items.find(i => i.is_lead) ?? items.slice().sort((a, c) => score(a) - score(c))[0];
 }
+const maxBytes = (ims: ItemImage[] | undefined) => (ims ?? []).reduce((m, x) => Math.max(m, x.bytes || 0), 0);
+/** 同一則動態的圖,檔案最大的(通常解析度最高)排第一,用在大版位 */
+function bySize(ims: ItemImage[] | undefined): ItemImage[] { return (ims ?? []).slice().sort((a, b) => (b.bytes || 0) - (a.bytes || 0) || a.sort - b.sort); }
 
 // ---------- 樣式 ----------
 const CSS = `
@@ -108,6 +112,26 @@ a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 .foot .about{max-width:38em;margin:40px auto 0;text-align:center;font-family:var(--sans);font-size:14px;line-height:1.85;color:#d2d2d2}.foot .about b{color:#fff;font-weight:500}
 .foot .bot{display:flex;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;margin-top:72px;padding-top:16px;border-top:1px solid #fff;font-family:var(--sans);font-size:13px;line-height:18px;text-transform:uppercase;letter-spacing:.03em}
 .foot nav{display:flex;gap:20px;flex-wrap:wrap}.foot a:hover{color:#bdbdbd}
+img.lo{object-fit:scale-down!important;background:var(--sage)}.hero>img.lo{background:#1b1b1b}
+/* 每期統整文章 */
+.theme{max-width:30em;margin:28px auto 0;font-family:var(--zh);font-size:clamp(18px,1.7vw,22px);line-height:1.8}
+.ihead+.hero{margin-top:56px}
+.toc{padding-top:clamp(88px,9vw,140px)}.toc .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px 18px;padding:0 var(--g)}
+.toc h3{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--ink);font-family:var(--serif);font-size:24px;line-height:1.2}.toc h3 span{font-family:var(--sans);font-size:13px;color:var(--mute)}
+.toc li{border-bottom:1px solid var(--hair)}.toc li a{display:block;padding:14px 0;font-family:var(--zh);font-size:16px;line-height:1.65}.toc li a:hover{color:var(--mute)}
+.toc li b{display:flex;align-items:center;gap:8px;font-weight:400;font-family:var(--sans);font-size:13px;line-height:17px;margin-bottom:6px}.toc .none{padding:14px 0;font-family:var(--sans);font-size:14px;color:var(--mute)}
+.chap{padding-top:clamp(104px,10vw,170px);scroll-margin-top:16px}.chap-h{text-align:center;margin:0 var(--g) clamp(40px,5vw,72px)}
+.chap-h h2{font-family:var(--serif);font-size:clamp(44px,5.4vw,80px);line-height:1;text-transform:uppercase;letter-spacing:-.01em}.chap-h p{font-family:var(--zh);font-size:clamp(17px,1.5vw,20px);margin-top:14px}.chap-h .lb{display:block;margin-top:10px;color:var(--mute)}
+.sb{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start;margin:0 var(--g);padding:clamp(40px,4vw,64px) 0;border-top:1px solid var(--ink);scroll-margin-top:16px}
+.sb.rev .pic{order:2;justify-self:end}.sb .pic{position:sticky;top:24px;width:min(100%,520px)}.sb .ph{display:block;aspect-ratio:4/5;background:var(--ph);overflow:hidden}.sb .ph img{width:100%;height:100%;object-fit:cover}.sb .cap{margin-top:8px;color:var(--mute)}
+.sb .nm{font-family:var(--serif);font-size:clamp(56px,7vw,112px);line-height:.94;text-transform:uppercase;letter-spacing:-.015em;overflow-wrap:anywhere;padding-top:8px}
+.sb .st{max-width:34em;padding:4px 0 0 clamp(0px,2vw,40px)}.sb.rev .st{padding:4px clamp(0px,2vw,40px) 0 0;justify-self:end}
+.sb .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sb .who a{text-transform:uppercase;letter-spacing:.04em}.sb .who a:hover{color:var(--mute)}.sb .who span{color:var(--mute)}
+.sb h3{font-family:var(--zh);font-size:clamp(22px,2.1vw,30px);line-height:1.5;margin:18px 0 12px}.sb h3 a:hover{color:var(--mute)}
+.sb .when{color:var(--mute);margin-bottom:28px}.sb .sum{font-family:var(--zh);font-size:17px;line-height:2;text-indent:2em}
+.sb .why{margin-top:32px;padding-top:14px;border-top:1px solid var(--ink)}.sb .why h4{margin:0 0 8px;font-family:var(--serif);font-weight:400;font-size:17px;text-transform:uppercase;letter-spacing:.02em}.sb .why p{font-family:var(--zh);font-size:16px;line-height:1.95}
+.sb .src{margin-top:28px;color:var(--mute);line-height:1.8}.sb .src a{text-decoration:underline;text-decoration-color:var(--faint);text-underline-offset:3px}.sb .src a:hover{color:var(--ink)}
+.back{padding:20px var(--g) 0}.back a{text-decoration:underline;text-underline-offset:3px}
 /* 列表頁(每期全部動態、全部動態、品牌) */
 .phd{text-align:center;padding:72px var(--g) 0}
 .phd h1{font-family:var(--serif);font-size:clamp(34px,3.5vw,50px);line-height:1.04;text-transform:uppercase}
@@ -141,7 +165,7 @@ a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 .facts dt{color:var(--mute)}.facts dd{margin:0}.facts a{text-decoration:underline;text-decoration-color:var(--faint);text-underline-offset:3px}.facts a:hover{text-decoration-color:var(--ink)}
 .facts li+li{margin-top:6px}
 @media (max-width:1000px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.row{grid-auto-columns:calc((100% - 2*18px)/2.6)}}
-@media (max-width:900px){.hero .in{grid-template-columns:minmax(0,1fr)}.hero .ls{display:none}
+@media (max-width:900px){.hero .in{grid-template-columns:minmax(0,1fr)}.hero .ls{display:none}.toc .cols,.sb{grid-template-columns:minmax(0,1fr)}.sb .pic{position:static;width:100%}.sb.rev .pic{order:0}.sb .st,.sb.rev .st{padding:24px 0 0;justify-self:start}.sb .nm{font-size:56px}
 .split,.body{grid-template-columns:minmax(0,1fr)}.split{min-height:0}.split .im{min-height:0;aspect-ratio:4/5}.split .tx{padding:28px var(--g) 8px}.split h1{margin:40px 0 8px}.credit{width:auto}
 .meta{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.body .side{order:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.body .side figure{width:auto;margin:48px 0 0}
 .band .cols,.issues{grid-template-columns:minmax(0,1fr)}.wrow{grid-template-columns:minmax(0,1fr) 120px}.wrow .ticks{display:none}}
@@ -151,7 +175,7 @@ a.wrow:hover .n{color:var(--mute)}.wrow .c{text-align:right}
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;600&display=swap';
 const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>';
-const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
+const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});function fit(i){if(!i.naturalWidth)return;var r=i.getBoundingClientRect();if(i.naturalWidth<r.width*.9||i.naturalHeight<r.height*.9)i.classList.add('lo')}document.querySelectorAll('img[data-fit]').forEach(function(i){if(i.complete)fit(i);else i.addEventListener('load',function(){fit(i)})});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
 
 // ---------- 外框 ----------
 function page(s: Site, o: { title: string; body: string; draft?: string | null; desc?: string }): string {
@@ -193,20 +217,20 @@ function mark(id: string, b: Brand | undefined, cls: 'mk' | 'mkM' | 'mkL') {
 }
 
 function picture(c: Ctx, it: Item, eager = false) {
-  const im = c.images[it.id]?.[0];
-  return im ? `<img src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
+  const im = bySize(c.images[it.id])[0];
+  return im ? `<img data-fit src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
 }
 
 /** 圖卡。issue:同一期裡,標籤寫品牌;cross:跨期,標籤寫第幾週 */
-function card(c: Ctx, it: Item, mode: 'issue' | 'cross') {
+function card(c: Ctx, it: Item, mode: 'issue' | 'cross', href?: string) {
   const b = c.brands.get(it.brand_id);
   const label = mode === 'issue' ? `${CATEGORY_EN[it.category]}, ${enName(b, it.brand_id)}` : `${CATEGORY_EN[it.category]}, ${wlabel(it.week)}`;
   const dek = mode === 'issue' ? [it.market, itemDates(it)].filter(Boolean).join(' · ') : [b?.name_zh ?? it.brand_id, it.market].filter(Boolean).join(' · ');
-  return `<a class="card" href="${esc(storyHref(c, it))}"><div class="im">${picture(c, it)}</div><p class="lb">${mark(it.brand_id, b, 'mk')}<span>${esc(label)}</span></p><h3>${esc(it.title)}</h3><p class="d">${esc(dek)}</p></a>`;
+  return `<a class="card" href="${esc(href ?? storyHref(c, it))}"><div class="im">${picture(c, it)}</div><p class="lb">${mark(it.brand_id, b, 'mk')}<span>${esc(label)}</span></p><h3>${esc(it.title)}</h3><p class="d">${esc(dek)}</p></a>`;
 }
 
 function coverBlock(issue: { week: string; no: number | null; range_start: string; range_end: string }, key: string | null, href: string, tag = 'a') {
-  const img = key ? `<img src="${esc('/img/' + key.replace(/^img\//, ''))}" alt="" loading="lazy">` : '';
+  const img = key ? `<img data-fit src="${esc('/img/' + key.replace(/^img\//, ''))}" alt="" loading="lazy">` : '';
   return `<${tag} class="cover${key ? ' img' : ''}"${tag === 'a' ? ` href="${esc(href)}"` : ''}>${img}<span class="m">APAC RADAR</span><span class="c"><b>Week ${esc(wnum(issue.week))} Issue</b>${esc(rangeShort(issue.range_start, issue.range_end))}</span><span class="w">${esc(pad2(issue.no))}</span></${tag}>`;
 }
 
@@ -223,58 +247,107 @@ function filterLine(hrefs: { all: string; cat: (c: Cat) => string }, current: Ca
   return `<p class="filters">${[a(hrefs.all, 'All', !current), ...CATEGORIES.map(c => a(hrefs.cat(c), CATEGORY_EN[c], current === c))].join(', ')}</p>`;
 }
 
-// ---------- 每期首頁(首頁就是最新一期) ----------
-export function renderIssueHome(b: IssueBundle, s: Site, issues: IssueSummary[]): string {
+// ---------- 首頁(雜誌封面式,點進去是當期統整文章) ----------
+export function renderHome(b: IssueBundle, s: Site, issues: IssueSummary[]): string {
   const L = s.link;
   const c = ctxOf(s, b.brands, b.images);
   const { issue, items } = b;
+  const issueHref = L(`/w/${issue.week}`);
+  const anchor = (it: Item) => `${issueHref}#${it.id}`;
   const lead = pickLead(items, b.images);
-  const rest = items.filter(i => i !== lead);
   const active = new Set(items.map(i => i.brand_id)).size;
-  const coverItem = rest.find(i => b.images[i.id]?.length) ?? lead;
-  const coverKey = coverItem ? b.images[coverItem.id]?.[0]?.kv_key ?? null : null;
-  const draft = issue.status !== 'published';
+  const coverKey = bySize(items.filter(i => i !== lead).flatMap(i => b.images[i.id] ?? []))[0]?.kv_key ?? (lead ? bySize(b.images[lead.id])[0]?.kv_key ?? null : null);
 
   const head = `<section class="ihead"><h1>Issue ${esc(pad2(issue.no))}<br>${esc(wlabel(issue.week))}</h1>
 <p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · ${items.length} stories from ${active} brands</p>
-${coverBlock(issue, coverKey, '', 'div')}
-<p class="duo"><a href="#inside">Read</a><i aria-hidden="true"></i><a href="${esc(L(`/w/${issue.week}/stories`))}">All Stories</a></p></section>`;
+${coverBlock(issue, coverKey, issueHref)}
+<p class="duo"><a href="${esc(issueHref)}">Read the Issue</a><i aria-hidden="true"></i><a href="${esc(L('/w'))}">All Issues</a></p></section>`;
 
-  const leadB = lead ? c.brands.get(lead.brand_id) : undefined;
-  const hero = lead ? `<section class="hero">${b.images[lead.id]?.length ? `<img src="${esc(imgSrc(b.images[lead.id][0]))}" alt="" loading="eager">` : ''}
-<div class="in"><div><span class="k">${esc(enName(leadB, lead.brand_id))}</span><h2><a href="${esc(storyHref(c, lead))}">${esc(lead.title)}</a></h2></div>
-<div class="ls"><p>This Week</p><ol>${items.map(i => `<li><span>${esc(CATEGORY_EN[i.category])}</span><a href="${esc(storyHref(c, i))}" title="${esc(i.title)}">${esc(enName(c.brands.get(i.brand_id), i.brand_id))} · ${esc(i.market)}</a></li>`).join('')}</ol></div></div></section>` : '';
+  const hero = lead ? heroBlock(c, b, lead, issueHref, anchor) : '';
 
-  const inside = rest.length ? `<section class="sect" id="inside"><div class="sh"><h2>Inside ${esc(wlabel(issue.week))}</h2><a href="${esc(L(`/w/${issue.week}/stories`))}">View All</a></div>
-<div class="row">${rest.map(i => card(c, i, 'issue')).join('')}</div></section>` : `<div id="inside"></div>`;
-
-  const noteItem = rest.filter(i => i.observation).sort((x, y) => ((b.images[x.id]?.length ? 0 : 100) + x.rank) - ((b.images[y.id]?.length ? 0 : 100) + y.rank))[0];
-  const feat = noteItem ? `<section class="feat"><span class="k">Worth Noting</span><h2>${esc(noteItem.observation)}</h2>
-<a class="ph" href="${esc(storyHref(c, noteItem))}">${picture(c, noteItem)}</a><p class="lb">${esc(CATEGORY_EN[noteItem.category])}, <a href="${esc(storyHref(c, noteItem))}">${esc(c.brands.get(noteItem.brand_id)?.name_zh ?? noteItem.brand_id)}</a></p></section>` : '';
-
-  const band = `<section class="band"><div class="bh"><h2>By Category</h2><p>Three ways into ${esc(wlabel(issue.week))}</p></div><div class="cols">${CATEGORIES.map(cat => {
+  const band = `<section class="band"><div class="bh"><h2>In This Issue</h2><p>Three ways into ${esc(wlabel(issue.week))}</p></div><div class="cols">${CATEGORIES.map(cat => {
     const list = items.filter(i => i.category === cat);
-    const top = pickLead(list, b.images);
-    const more = `<a class="more" href="${esc(L(`/w/${issue.week}/stories?c=${cat}`))}">${list.length} ${list.length === 1 ? 'story' : 'stories'} in ${CATEGORY_EN[cat]}</a>`;
-    return `<div>${top ? card(c, top, 'issue') : `<p class="lb" style="margin-bottom:8px">${CATEGORY_EN[cat]}</p><p class="none">這一週沒有${CATEGORY_ZH[cat]}的動態。</p>`}${top ? more : ''}</div>`;
-  }).join('')}</div></section>`;
-
-  const thisWeek = new Set(items.map(i => i.brand_id));
-  const rows = b.brands.slice().sort((x, y) => (+thisWeek.has(y.id) - +thisWeek.has(x.id)) || ((b.activity[y.id]?.length ?? 0) - (b.activity[x.id]?.length ?? 0)) || x.sort - y.sort)
-    .filter(br => thisWeek.has(br.id)).map(br => {
-      const weeks = new Set(b.activity[br.id] ?? []); const n = items.filter(i => i.brand_id === br.id).length; const mk: string[] = JSON.parse(br.markets);
-      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${mark(br.id, br, 'mkM')}<span>${esc(enName(br))}<small>${esc(br.name_zh)} · ${esc(mk.join(' · '))}</small></span></span><span class="ticks" title="近八週有動態的週">${b.weeks8.map(w => `<i${weeks.has(w) ? ' class="on"' : ''}></i>`).join('')}</span><span class="lb c">${n} ${n === 1 ? 'story' : 'stories'}</span></a>`;
-    }).join('');
-  const watch = `<section class="sect"><div class="sh"><h2>Brand Watch</h2><span>Last eight weeks</span></div>${rows}
-<p class="quiet"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ') || '沒有品牌安靜。'}</p></section>`;
+    const top = pickLead(list.filter(i => i !== lead).length ? list.filter(i => i !== lead) : list, b.images);
+    return `<div>${top ? card(c, top, 'issue', anchor(top)) + `<a class="more" href="${esc(issueHref + '#' + cat)}">${list.length} ${list.length === 1 ? 'story' : 'stories'} in ${CATEGORY_EN[cat]}</a>` : `<p class="lb" style="margin-bottom:8px">${CATEGORY_EN[cat]}</p><p class="none">這一週沒有${CATEGORY_ZH[cat]}的動態。</p>`}</div>`;
+  }).join('')}</div><p class="bh" style="margin:64px 0 0"><a class="more" style="font-size:15px" href="${esc(issueHref)}">Read the full issue, ${items.length} stories</a></p></section>`;
 
   const past = issues.slice(0, 3);
-  const pastHtml = past.length > 1 || (past.length === 1 && past[0].week !== issue.week) ? `<section class="sect"><div class="sh"><h2>Recent Issues</h2><a href="${esc(L('/w'))}">View All</a></div>
-<div class="issues">${past.map(p => issueTile(s, p, p.week === issues[0]?.week)).join('')}</div></section>` : '';
+  const pastHtml = past.length > 1 ? `<section class="sect"><div class="sh"><h2>Recent Issues</h2><a href="${esc(L('/w'))}">View All</a></div>
+<div class="issues">${past.map((p, i) => issueTile(s, p, i === 0)).join('')}</div></section>` : '';
 
-  const body = `${head}${hero}${inside}${feat}${band}${watch}${pastHtml}
+  const body = `${head}${hero}${band}${brandWatch(c, b)}${pastHtml}
 <p class="cats"><a href="${esc(L('/c'))}">All</a>, ${CATEGORIES.map(cat => `<a href="${esc(L('/c/' + cat))}">${CATEGORY_EN[cat]}</a>`).join(', ')}, <a href="${esc(L('/b'))}">Brands</a></p><div class="hr"></div>`;
-  return page(s, { title: `APAC Radar · ${wlabel(issue.week)}, ${rangeShort(issue.range_start, issue.range_end)}`, body, draft: draft ? issue.week : null, desc: lead?.title });
+  return page(s, { title: `APAC Radar · ${wlabel(issue.week)}, ${rangeShort(issue.range_start, issue.range_end)}`, body, draft: issue.status !== 'published' ? issue.week : null, desc: lead?.title });
+}
+
+function heroBlock(c: Ctx, b: IssueBundle, lead: Item, issueHref: string, anchor: (it: Item) => string) {
+  const im = bySize(b.images[lead.id])[0];
+  return `<section class="hero">${im ? `<img data-fit src="${esc(imgSrc(im))}" alt="" loading="eager">` : ''}
+<div class="in"><div><span class="k">${esc(enName(c.brands.get(lead.brand_id), lead.brand_id))}</span><h2><a href="${esc(anchor(lead))}">${esc(lead.title)}</a></h2></div>
+<div class="ls"><p>This Week</p><ol>${b.items.map(i => `<li><span>${esc(CATEGORY_EN[i.category])}</span><a href="${esc(anchor(i))}" title="${esc(i.title)}">${esc(enName(c.brands.get(i.brand_id), i.brand_id))} · ${esc(i.market)}</a></li>`).join('')}</ol></div></div></section>`;
+}
+
+function brandWatch(c: Ctx, b: IssueBundle) {
+  const L = c.s.link;
+  const thisWeek = new Set(b.items.map(i => i.brand_id));
+  const rows = b.brands.filter(br => thisWeek.has(br.id))
+    .sort((x, y) => ((b.activity[y.id]?.length ?? 0) - (b.activity[x.id]?.length ?? 0)) || x.sort - y.sort).map(br => {
+      const weeks = new Set(b.activity[br.id] ?? []); const n = b.items.filter(i => i.brand_id === br.id).length; const mk: string[] = JSON.parse(br.markets);
+      return `<a class="wrow" href="${esc(L('/b/' + br.id))}"><span class="n">${mark(br.id, br, 'mkM')}<span>${esc(enName(br))}<small>${esc(br.name_zh)} · ${esc(mk.join(' · '))}</small></span></span><span class="ticks" title="近八週有動態的週">${b.weeks8.map(w => `<i${weeks.has(w) ? ' class="on"' : ''}></i>`).join('')}</span><span class="lb c">${n} ${n === 1 ? 'story' : 'stories'}</span></a>`;
+    }).join('');
+  return `<section class="sect"><div class="sh"><h2>Brand Watch</h2><span>Last eight weeks</span></div>${rows}
+<p class="quiet"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ') || '沒有品牌安靜。'}</p></section>`;
+}
+
+/** 統整文章裡的一則動態:圖文左右交錯,全文、為什麼重要、來源都在這裡 */
+function storyBlock(c: Ctx, b: IssueBundle, it: Item, i: number) {
+  const br = c.brands.get(it.brand_id);
+  const im = bySize(b.images[it.id])[0];
+  const srcs = b.sources[it.id] ?? [];
+  const meta = [it.market, itemDates(it), it.status_note].filter(Boolean).join(' · ');
+  const links = srcs.map(x => { const u = safeUrl(x.url); const t = x.publisher || host(x.url); return u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t); }).join('、');
+  const left = im ? `<a class="ph" href="${esc(storyHref(c, it))}"><img data-fit src="${esc(imgSrc(im))}" alt="" loading="lazy" decoding="async"></a><p class="lb cap">${esc(im.credit)}</p>`
+    : `<p class="nm" aria-hidden="true">${esc(enName(br, it.brand_id))}</p>`;
+  return `<article class="sb${i % 2 ? ' rev' : ''}" id="${esc(it.id)}"><div class="pic">${left}</div><div class="st">
+<p class="lb who">${mark(it.brand_id, br, 'mk')}<a href="${esc(c.s.link('/b/' + it.brand_id))}">${esc(enName(br, it.brand_id))}</a><span>${esc(br?.name_zh ?? '')}</span></p>
+<h3><a href="${esc(storyHref(c, it))}">${esc(it.title)}</a></h3><p class="lb when">${esc(meta)}</p>
+<p class="sum">${esc(it.summary)}</p>
+${it.observation ? `<div class="why"><h4>Why it matters</h4><p>${esc(it.observation)}</p></div>` : ''}
+<p class="lb src">${it.confidence === 'verified' ? '已佐證' : '單一來源'}${links ? ' · 來源:' + links : ''}</p></div></article>`;
+}
+
+// ---------- 每期統整文章 ----------
+export function renderIssue(b: IssueBundle, s: Site, issues: IssueSummary[]): string {
+  const L = s.link;
+  const c = ctxOf(s, b.brands, b.images);
+  const { issue, items } = b;
+  const active = new Set(items.map(i => i.brand_id)).size;
+  const lead = pickLead(items, b.images);
+  const anchor = (it: Item) => `#${it.id}`;
+  const idx = issues.findIndex(i => i.week === issue.week);
+  const older = idx >= 0 ? issues[idx + 1] : undefined, newer = idx > 0 ? issues[idx - 1] : undefined;
+
+  const head = `<section class="ihead"><h1>Issue ${esc(pad2(issue.no))}<br>${esc(wlabel(issue.week))}</h1>
+<p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · ${items.length} stories from ${active} brands · ${b.quiet.length} quiet</p>
+${issue.theme_line ? `<p class="theme">${esc(issue.theme_line)}</p>` : ''}</section>`;
+
+  const toc = `<section class="toc"><div class="sh"><h2>Contents</h2><span>本期目錄</span></div><div class="cols">${CATEGORIES.map(cat => {
+    const list = items.filter(i => i.category === cat);
+    return `<div><h3><a href="#${cat}">${CATEGORY_EN[cat]}</a><span>${CATEGORY_ZH[cat]} · ${list.length}</span></h3><ol>${list.length ? list.map(i => `<li><a href="${anchor(i)}"><b>${mark(i.brand_id, c.brands.get(i.brand_id), 'mk')}${esc(enName(c.brands.get(i.brand_id), i.brand_id))}</b>${esc(i.title)}</a></li>`).join('') : `<li class="none">這一週沒有${CATEGORY_ZH[cat]}的動態。</li>`}</ol></div>`;
+  }).join('')}</div></section>`;
+
+  const chapters = CATEGORIES.map(cat => {
+    const list = items.filter(i => i.category === cat);
+    if (!list.length) return '';
+    const ordered = lead && lead.category === cat ? [lead, ...list.filter(i => i !== lead)] : list;
+    return `<section class="chap" id="${cat}"><div class="chap-h"><h2>${CATEGORY_EN[cat]}</h2><p>${CATEGORY_ZH[cat]}</p><span class="lb">${list.length} ${list.length === 1 ? 'story' : 'stories'}</span></div>${ordered.map((it, i) => storyBlock(c, b, it, i)).join('')}</section>`;
+  }).join('');
+
+  const pager = older || newer ? `<nav class="pager" aria-label="上一期下一期">${older ? `<a href="${esc(L(`/w/${older.week}`))}"><span class="lb">Previous Issue</span><b>${esc(wlabel(older.week))}</b></a>` : ''}${newer ? `<a class="nx" href="${esc(L(`/w/${newer.week}`))}"><span class="lb">Next Issue</span><b>${esc(wlabel(newer.week))}</b></a>` : ''}</nav>` : '';
+
+  const body = `${head}${lead ? heroBlock(c, b, lead, '', anchor) : ''}${toc}${chapters}${brandWatch(c, b)}${pager}
+<div class="viewing"><a href="${esc(L('/'))}">Home</a><span>Reading: Issue ${esc(pad2(issue.no))}, ${esc(wlabel(issue.week))}</span><a href="${esc(L(`/w/${issue.week}/stories`))}">All Stories</a></div>`;
+  return page(s, { title: `Issue ${pad2(issue.no)} · ${wlabel(issue.week)}, ${rangeShort(issue.range_start, issue.range_end)} · APAC Radar`, body, draft: issue.status !== 'published' ? issue.week : null, desc: lead?.title });
 }
 
 function issueTile(s: Site, p: IssueSummary, latest: boolean) {
@@ -294,7 +367,7 @@ export function renderIssueStories(b: IssueBundle, s: Site, issues: IssueSummary
   const pager = older || newer ? `<nav class="pager" aria-label="上一期下一期">${older ? `<a href="${esc(L(`/w/${older.week}/stories`))}"><span class="lb">Previous Issue</span><b>${esc(wlabel(older.week))}</b></a>` : ''}${newer ? `<a class="nx" href="${esc(L(`/w/${newer.week}/stories`))}"><span class="lb">Next Issue</span><b>${esc(wlabel(newer.week))}</b></a>` : ''}</nav>` : '';
   const body = `<section class="phd">${issueSelect(s, issues.length ? issues : [{ ...issue, items: 0, brands: 0, lead_title: null, lead_brand: null, cover_key: null }], issue.week, cat ? '/' + cat : '', 'All Issues')}
 ${filterLine({ all: L(`/w/${issue.week}/stories`), cat: x => L(`/w/${issue.week}/stories?c=${x}`) }, cat)}
-<p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · <a href="${esc(L(`/w/${issue.week}`))}" style="text-decoration:underline;text-underline-offset:3px">Back to the issue</a></p></section>
+<p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · <a href="${esc(L(`/w/${issue.week}`))}" style="text-decoration:underline;text-underline-offset:3px">Read the full issue</a></p></section>
 <div class="hr"></div>
 ${list.length ? `<div class="grid">${list.map(i => card(c, i, 'issue')).join('')}</div>` : `<p class="empty">這一期沒有${cat ? CATEGORY_ZH[cat] + '的' : ''}動態。</p>`}
 ${!cat && b.quiet.length ? `<p class="quiet" style="margin-top:96px"><span class="lb">Quiet this week · 本週安靜</span>${b.quiet.map(q => `<a href="${esc(L('/b/' + q.id))}">${esc(q.name_zh)}</a>`).join(', ')}</p>` : ''}
@@ -367,12 +440,12 @@ export function renderStory(b: IssueBundle, it: Item, s: Site): string {
   const c = ctxOf(s, b.brands, b.images);
   const br = c.brands.get(it.brand_id);
   const name = enName(br, it.brand_id);
-  const imgs = b.images[it.id] ?? [];
+  const imgs = bySize(b.images[it.id]);
   const srcs: ItemSource[] = b.sources[it.id] ?? [];
   const n = name.length;
   const fs = n <= 6 ? 'clamp(68px,9vw,140px)' : n <= 10 ? 'clamp(58px,7vw,112px)' : 'clamp(44px,5.2vw,84px)';
   const first = imgs[0];
-  const left = first ? `<a href="${esc(imgSrc(first))}" target="_blank" rel="noopener" class="im"><img src="${esc(imgSrc(first))}" alt="${esc(it.title)}" loading="eager"></a>` : `<div class="im"><span class="mono" aria-hidden="true">${esc(initial(c, it))}</span></div>`;
+  const left = first ? `<a href="${esc(imgSrc(first))}" target="_blank" rel="noopener" class="im"><img data-fit src="${esc(imgSrc(first))}" alt="${esc(it.title)}" loading="eager"></a>` : `<div class="im"><span class="mono" aria-hidden="true">${esc(initial(c, it))}</span></div>`;
   const verified = it.confidence === 'verified';
   const others = b.items.filter(x => x.id !== it.id).sort((x, y) => (+(y.category === it.category) - +(x.category === it.category)) || ((b.images[x.id]?.length ? 0 : 100) + x.rank) - ((b.images[y.id]?.length ? 0 : 100) + y.rank)).slice(0, 3);
 
@@ -386,7 +459,7 @@ export function renderStory(b: IssueBundle, it: Item, s: Site): string {
 
   const body = `<article><section class="split">${left}<div class="tx"><p class="by">${esc(wlabel(it.week))}<br><span>${esc(rangeShort(b.issue.range_start, b.issue.range_end))}</span></p><h1 style="font-size:${fs}">${esc(name)}</h1></div></section>
 ${first ? `<p class="lb credit">${esc(first.credit)}</p>` : ''}
-<p class="dek">${esc(it.title)}</p>
+<p class="dek">${esc(it.title)}</p><p class="lb back"><a href="${esc(L(`/w/${it.week}#${it.id}`))}">Read it in Issue ${esc(pad2(b.issue.no))}, ${esc(wlabel(it.week))}</a></p>
 <div class="meta"><div><b>${esc(wlabel(it.week))}, Issue ${esc(pad2(b.issue.no))}</b><span>${esc(rangeShort(b.issue.range_start, b.issue.range_end))}</span></div>
 <div><b><a href="${esc(L('/c/' + it.category))}">${CATEGORY_EN[it.category]}</a></b><span>${CATEGORY_ZH[it.category]}</span></div>
 <div><b>${mark(it.brand_id, br, 'mk')}<a href="${esc(L('/b/' + it.brand_id))}">${esc(name)}</a></b><span>${esc(br?.name_zh ?? '')} · ${esc(it.market)}</span></div>
@@ -395,7 +468,7 @@ ${first ? `<p class="lb credit">${esc(first.credit)}</p>` : ''}
 <div class="txt"><p>${esc(it.summary)}</p>
 ${it.observation ? `<div class="why"><h2>Why it matters</h2><p>${esc(it.observation)}</p></div>` : ''}
 <dl class="facts">${facts}${srcList}</dl></div></div></article>
-${others.length ? `<section class="band"><div class="bh"><h2>More from ${esc(wlabel(it.week))}</h2><p><a href="${esc(L(`/w/${it.week}`))}">Back to the issue</a></p></div><div class="cols">${others.map(o => card(c, o, 'issue')).join('')}</div></section>` : ''}`;
+${others.length ? `<section class="band"><div class="bh"><h2>More from ${esc(wlabel(it.week))}</h2><p><a href="${esc(L(`/w/${it.week}`))}">Read the full issue</a></p></div><div class="cols">${others.map(o => card(c, o, 'issue')).join('')}</div></section>` : ''}`;
   return page(s, { title: `${name}:${it.title} · APAC Radar`, body, draft: b.issue.status !== 'published' ? b.issue.week : null, desc: it.summary.slice(0, 140) });
 }
 
