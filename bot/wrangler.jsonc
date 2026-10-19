@@ -1,0 +1,34 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "apac-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // 每天 UTC 10:00(台北 18:00)整理當天的群組大綱。
+  "triggers": { "crons": ["0 10 * * *"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "apac-bot", "database_id": "ee94d406-a247-4b0d-85e4-580b3426e1f8", "migrations_dir": "migrations" },
+    // 競品雷達的資料庫,只讀:回答競品問題、計算整體 API 花費。
+    { "binding": "RADAR", "database_name": "apac-radar", "database_id": "31b3db0f-a4ba-4ffa-9bfc-1b5b546e6a22" }
+  ],
+  "ai": { "binding": "AI" },
+  "vectorize": [
+    { "binding": "VEC", "index_name": "apac-bot-kb" }
+  ],
+  "vars": {
+    "BOT_NAME": "亞太寶寶",
+    "ORG_NAME": "吃茶三千 亞太暨國際發展事業部",
+    "MS_APP_ID": "16580072-5cd3-4235-abee-eb3a84f075a1",
+    "MS_TENANT_ID": "1e2cbaaf-7e65-4a10-8e69-2f204f5d4d51",
+    // 她只在這些群組裡回話;私訊不受限。空字串 = 全部群組都回。
+    "ALLOWED_CHATS": "19:386c4c92501d4f42a3985c07f1148737@thread.v2",
+    // 整個 Anthropic 帳號的月預算(含競品雷達)。到 85% 她會省著用,到 100% 停下來。
+    "BUDGET_USD": "100",
+    "RADAR_URL": "https://apac-radar.ccsc.workers.dev",
+    "MODEL_FAST": "claude-haiku-5-5",
+    "MODEL_MAIN": "claude-sonnet-5-5",
+    "MODEL_DEEP": "claude-opus-5-5"
+  }
+  // secrets(用 wrangler secret put 設定):ANTHROPIC_API_KEY、MS_APP_SECRET、ADMIN_TOKEN
+}

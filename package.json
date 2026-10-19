@@ -8,7 +8,9 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "migrate:remote": "wrangler d1 migrations apply apac-radar --remote",
-    "migrate:local": "wrangler d1 migrations apply apac-radar --local"
+    "migrate:local": "wrangler d1 migrations apply apac-radar --local",
+    "deploy:bot": "wrangler deploy -c bot/wrangler.jsonc",
+    "migrate:bot": "wrangler d1 migrations apply apac-bot --remote -c bot/wrangler.jsonc"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

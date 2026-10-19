@@ -1,7 +1,9 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "bot/src/teams.ts"
+    ],
     "ignoreValues": [
       {
         "rule": "overused-font",
