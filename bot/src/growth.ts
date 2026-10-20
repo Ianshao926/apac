@@ -27,9 +27,8 @@ const md = (d: string) => d.replace(/^\d{4}-0?(\d+)-0?(\d+)$/, '$1/$2');
 export function selfLine(joinDate: string): string {
   const n = skillsThisStage();
   const learned = n ? `到目前學會 ${n} 件新事` : '還在學';
-  if (currentStage() === 0) return `我是亞太寶寶，${md(joinDate)} 加入這個群組，${learned}。長大以後會變成${nextStageName()}，到時候再跟大家說。`;
-  const next = nextStageName();
-  return `我是亞太寶寶，已經長成${stageName()}了（${md(grownAt())}）。${md(joinDate)} 加入這個群組，這個階段${learned}。${next ? `下一階段是${next}。` : '已經是最資深的了。'}`;
+  if (currentStage() === 0) return `我是亞太寶寶，${md(joinDate)} 加入這個群組，${learned}。`;
+  return `我是亞太寶寶，已經長成${stageName()}了（${md(grownAt())}）。${md(joinDate)} 加入這個群組，這個階段${learned}。`;
 }
 
 /** 給模型看的一行自我資料,讓她知道自己幾歲、什麼時候來的 */

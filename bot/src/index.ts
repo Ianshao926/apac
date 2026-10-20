@@ -13,14 +13,21 @@ import LOGO from '../assets/logo-512.png';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const page = (title: string, body: string) => new Response(`<!doctype html><html lang="zh-Hant-TW"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;max-width:40em;margin:60px auto;padding:0 20px;line-height:1.9;color:#111}h1{font-weight:600;font-size:22px}</style><body><h1>${title}</h1>${body}</body></html>`, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 
-const HELP = `我是亞太寶寶，部門群組裡的 AI 同事。可以這樣用我：
-- **@我 問問題**：群組裡的事、競品動態、市場資訊、翻譯、整理，附圖片也看得懂
-- **回覆我的訊息**也算在叫我，不用再 @；對我的回答按 👍 或 👎 我會記住
-- **找紀錄**：「上週誰說要跟泰國代理商聯絡？」這種我會翻對話紀錄
-- **每天 18:00** 我會把當天的對話整理成大綱貼在群組
-- **記住 + 網址或一段文字**：存進知識庫，之後問到我就會引用
-- **今天的大綱**：現在就整理今天到目前為止的對話
-- **額度**：看這個月的 AI 花費`;
+const HELP = `我是亞太寶寶，部門的新同事。可以這樣用我：
+
+**問問題**：@我，或直接回覆我的訊息
+- 群組裡的事：「上週誰說要跟泰國代理商聯絡？」「今天決定了什麼？」
+- 競品與市場：「霸王茶姬最近在馬來西亞做了什麼？」我會查部門的競品週報，需要的話上網查最新的
+- 看圖：貼菜單、海報、IG 截圖給我，我會讀出內容並分析
+- 翻譯、整理、解釋、寫短文都可以
+
+**每天 18:00** 我會貼當天的大綱。想提早看，說「今天的大綱」
+
+**餵我資料**：「記住 + 網址」或「記住 + 一段文字」，存進部門知識庫，回答時會附出處
+
+**回饋**：對我的回答按 👍 或 👎 我會記住；答錯了直接糾正我
+
+我只知道這個群組裡的事和共用知識庫，別的群組的內容不會講出來。`;
 
 const TPE_DATE = (ms = Date.now()) => new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
 const dayRangeUtc = (date: string) => { const s = Date.parse(`${date}T00:00:00+08:00`); return { from: new Date(s).toISOString(), to: new Date(s + 86400e3).toISOString() }; };
@@ -45,10 +52,18 @@ async function onActivity(env: Env, ctx: ExecutionContext, a: Activity) {
     if (added) {
       const chat = await upsertChat(env, a);
       const t: Target = { serviceUrl: a.serviceUrl, conversationId: a.conversation.id };
-      if (!allowedChat(env, chat)) { await sendText(env, t, '嗨，我是亞太寶寶。目前我只服務亞太事業部的群組，這裡我先不說話，有需要請找 Ian 開通。'); return; }
+      if (!allowedChat(env, chat)) { await sendText(env, t, '嗨，我是亞太寶寶。我目前只在亞太事業部的群組工作，這裡我先不說話，有需要請找 Ian 開通。'); return; }
       await sendText(env, t, chat.kind === 'personal'
-        ? '嗨，我是亞太寶寶 👋 直接跟我說話就好。打「幫助」看我會什麼。'
-        : `嗨，我是亞太寶寶 👋 從今天起我會跟著這個群組：\n- @我 就能問問題，群組裡的事、競品、市場都可以，附圖也看得懂\n- 每天 18:00 我會把當天的對話整理成大綱\n- 丟網址或資料給我說「記住」，就存進知識庫\n- 回覆我的訊息我會接著聊，對我按表情我也看得到\n\n打「@亞太寶寶 幫助」看完整說明。`);
+        ? '嗨，我是亞太寶寶 👋 這裡是我們兩個的私訊，想問什麼直接說，或丟資料給我說「記住」。打「幫助」看我會什麼。'
+        : `大家好，我是亞太寶寶，今天開始加入亞太事業部，是大家的新同事 👋
+
+我剛來，很多事還在學，不過這幾件現在就可以找我：
+- **問我問題**：@我 就好。群組裡誰說過什麼、競品最近在幹嘛、某個市場的狀況，附圖也看得懂
+- **每天 18:00**：我會把當天的討論整理成大綱，重點、決議、待辦一次列好
+- **餵我資料**：丟網址或一段文字給我說「記住」，之後有人問到我就會拿出來用，還會附出處
+- **回覆我、對我按表情**都可以，我看得到，也會記住
+
+答錯了請直接糾正我，我會改。打「@亞太寶寶 幫助」有完整說明。請多多指教！`);
     }
     if (removed) await deactivateChat(env, a.conversation.id);
     return;
@@ -110,7 +125,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   }
 
   const spend = await monthSpend(env);
-  if (spend.level === 'stop') return sendText(env, t, `這個月的 AI 額度（US$${spend.budget}）用完了，我先休息到下個月 1 號。急的話請 Ian 調高上限。`);
+  if (spend.level === 'stop') return sendText(env, t, '這個月的額度用完了，我先休息到下個月 1 號。急的話請找 Ian。');
   await sendTyping(env, t);
 
   const [recent, brands, images, complaints] = await Promise.all([recentMessages(env, chat.id, 30, a.id), radarBrands(env), fetchImages(env, a), negativeFeedback(env, chat.id)]);
@@ -235,7 +250,7 @@ export default {
       return new Response(null, { status: 200 });
     }
 
-    if (path === '/') return page(env.BOT_NAME, `<p><img src="/logo.png" width="128" height="128" alt="亞太寶寶" style="display:block;margin:0 0 20px"></p><p>${env.ORG_NAME}的 AI 同事，住在 Teams 裡。</p><p><a href="${env.RADAR_URL}">亞太競品雷達</a></p>`);
+    if (path === '/') return page(env.BOT_NAME, `<p><img src="/logo.png" width="128" height="128" alt="亞太寶寶" style="display:block;margin:0 0 20px"></p><p>${env.ORG_NAME}的新同事，住在 Teams 裡。</p><p><a href="${env.RADAR_URL}">亞太競品雷達</a></p>`);
     if (path === '/logo.png') return new Response(LOGO, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800' } });
     if (path === '/privacy') return page('隱私說明', `<p>亞太寶寶只在被安裝的 Teams 對話裡運作。它會保存該對話的訊息文字、每日大綱，以及同事主動要求「記住」的資料，用來回答問題與整理大綱；資料存放在${env.ORG_NAME}自己的 Cloudflare 帳號。回答時會把相關內容送到 Anthropic 的 API 處理，依其商用條款不會被用於訓練模型。圖片只在回答當下使用，不保存。要刪除資料請聯絡管理者。</p>`);
     if (path === '/terms') return page('使用條款', `<p>亞太寶寶是${env.ORG_NAME}內部使用的工具，僅供部門同事於工作用途使用。回答由 AI 產生，可能有誤，重要決策請自行確認來源。</p>`);

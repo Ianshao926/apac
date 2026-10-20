@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
   "manifestVersion": "1.23",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "id": "16580072-5cd3-4235-abee-eb3a84f075a1",
   "developer": {
     "name": "吃茶三千 亞太暨國際發展事業部",
@@ -9,9 +9,9 @@
     "privacyUrl": "https://apac-bot.ccsc.workers.dev/privacy",
     "termsOfUseUrl": "https://apac-bot.ccsc.workers.dev/terms"
   },
-  "name": { "short": "亞太寶寶", "full": "亞太寶寶：亞太事業部的 AI 同事" },
+  "name": { "short": "亞太寶寶", "full": "亞太寶寶：亞太事業部的新同事" },
   "description": {
-    "short": "亞太事業部的 AI 同事：回答問題、整理每日大綱、查競品",
+    "short": "亞太事業部的新同事：回答問題、整理每日大綱、查競品",
     "full": "亞太寶寶住在亞太暨國際發展事業部的 Teams 群組裡。@她 就能問問題，群組裡的事、競品動態、市場資訊都可以，附圖片也看得懂；每天 18:00 把當天的對話整理成大綱；丟網址或資料給她說「記住」，就存進部門知識庫，之後回答時會引用並附出處。"
   },
   "icons": { "color": "color.png", "outline": "outline.png" },
@@ -28,8 +28,7 @@
           "commands": [
             { "title": "幫助", "description": "看看我會什麼" },
             { "title": "今天的大綱", "description": "整理今天到現在的對話" },
-            { "title": "記住", "description": "後面接網址或一段文字，存進知識庫" },
-            { "title": "額度", "description": "看這個月的 AI 花費" }
+            { "title": "記住", "description": "後面接網址或一段文字，存進知識庫" }
           ]
         }
       ]
