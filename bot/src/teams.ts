@@ -88,8 +88,10 @@ export function teamsMarkdown(s: string): string {
   return s.trim().replace(/\r/g, '').replace(/\n(?!\n)/g, '\n\n').replace(/\n{3,}/g, '\n\n');
 }
 
-export function sendText(env: Env, t: Target, text: string) {
-  return postActivity(env, t, { type: 'message', textFormat: 'markdown', text: teamsMarkdown(text) });
+/** 回傳 Teams 給這則訊息的 id(之後有人對它按表情,通知裡帶的就是這個 id) */
+export async function sendText(env: Env, t: Target, text: string): Promise<string | null> {
+  const body = await postActivity(env, t, { type: 'message', textFormat: 'markdown', text: teamsMarkdown(text) });
+  try { return String(JSON.parse(body).id ?? '') || null; } catch { return null; }
 }
 
 export function sendTyping(env: Env, t: Target) {
@@ -127,8 +129,22 @@ export function hasFiles(activity: Activity) {
 /** 把 <at>亞太寶寶</at> 這類標記拿掉,HTML 轉純文字 */
 export function cleanText(s: string | undefined): string {
   if (!s) return '';
+  // 引用回覆:<blockquote itemtype="http://schema.skype.com/Reply">…<p itemprop="preview">原文</p></blockquote> → ［回覆 某人：原文］
+  const quoted = s.replace(/<blockquote[^>]*schema\.skype\.com\/Reply[^>]*>([\s\S]*?)<\/blockquote>/gi, (_m, inner: string) => {
+    const who = /<strong[^>]*>([^<]*)<\/strong>/i.exec(inner)?.[1]?.trim() || '某人';
+    const prev = /<p[^>]*itemprop="preview"[^>]*>([\s\S]*?)<\/p>/i.exec(inner)?.[1] ?? '';
+    const text = htmlToText(prev).replace(/\s+/g, ' ').slice(0, 120);
+    return `［回覆 ${who}：${text}］ `;
+  });
   // 對她自己的 @ 拿掉,對別人的 @ 保留成 @名字
-  return htmlToText(s.replace(/<at[^>]*>[^<]*寶寶[^<]*<\/at>/gi, ' ')).trim();
+  return htmlToText(quoted.replace(/<at[^>]*>[^<]*寶寶[^<]*<\/at>/gi, ' ')).trim();
+}
+
+/** 有人用「回覆」引用她的訊息 */
+export function isReplyToBot(activity: Activity, appId: string): boolean {
+  const m = /<blockquote[^>]*schema\.skype\.com\/Reply[^>]*>([\s\S]*?)<\/blockquote>/i.exec(activity.text || '');
+  if (!m) return false;
+  return m[1].includes(`28:${appId}`) || /<strong[^>]*>[^<]*寶寶[^<]*<\/strong>/i.test(m[1]);
 }
 
 export function htmlToText(html: string): string {
@@ -150,7 +166,7 @@ export function isMentioned(activity: Activity): boolean {
 }
 
 // ---- Graph:補抓一段時間內的聊天紀錄(需要 ChatMessage.Read.Chat 的 RSC 權限) ----
-export interface GraphMessage { id: string; ts: string; from_id: string | null; from_name: string | null; is_bot: boolean; text: string; images: number }
+export interface GraphMessage { id: string; ts: string; from_id: string | null; from_name: string | null; is_bot: boolean; text: string; images: number; reactions: number }
 
 export async function graphChatMessages(env: Env, chatId: string, sinceIso: string, maxPages = 6): Promise<GraphMessage[]> {
   const token = await graphToken(env);
@@ -167,7 +183,7 @@ export async function graphChatMessages(env: Env, chatId: string, sinceIso: stri
       const images = (html.match(/<img/gi) ?? []).length;
       if (!text && !images) continue;
       const app = m.from?.application; const user = m.from?.user;
-      out.push({ id: String(m.id), ts: m.createdDateTime, from_id: user?.id ?? app?.id ?? null, from_name: user?.displayName ?? app?.displayName ?? null, is_bot: !!app, text: text || '[圖片]', images });
+      out.push({ id: String(m.id), ts: m.createdDateTime, from_id: user?.id ?? app?.id ?? null, from_name: user?.displayName ?? app?.displayName ?? null, is_bot: !!app, text: text || '[圖片]', images, reactions: Array.isArray(m.reactions) ? m.reactions.length : 0 });
     }
     url = j['@odata.nextLink'] ?? null;
   }

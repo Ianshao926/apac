@@ -42,7 +42,7 @@ const TPE = (iso: string) => {
   const d = new Date(new Date(iso).getTime() + 8 * 3600e3);
   return `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 };
-export const fmtMsg = (m: Message) => `[${TPE(m.ts)}] ${m.is_bot ? '亞太寶寶' : (m.from_name ?? '某人')}：${m.text}`;
+export const fmtMsg = (m: Message) => `[${TPE(m.ts)}] ${m.is_bot ? '亞太寶寶' : (m.from_name ?? '某人')}：${m.text}${m.reactions > 0 ? `（${m.reactions} 人按了表情）` : ''}`;
 
 export async function triage(env: Env, question: string, recent: Message[], brands: RadarBrand[], hasImages: boolean): Promise<{ t: Triage; usage: Usage }> {
   const model = env.MODEL_FAST;
@@ -72,6 +72,7 @@ export interface AnswerInput {
   wantsLong: boolean;
   radarUrl: string;
   aboutMe: string;
+  complaints: { text: string; reaction: string; from_name: string | null }[];
 }
 
 const CAT: Record<string, string> = { new_product: '新品', campaign: '行銷', loyalty: '會員' };
@@ -83,6 +84,7 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
   parts.push(`【關於你自己】${inp.aboutMe}`);
   parts.push(`【這個對話最近的紀錄】\n${inp.recent.map(fmtMsg).join('\n') || '（還沒有紀錄）'}`);
   if (inp.found.length) parts.push(`【關鍵字找到的較早對話】\n${inp.found.map(fmtMsg).join('\n')}`);
+  if (inp.complaints.length) parts.push(`【提醒】你最近這幾個回答被同事按了不滿意的表情，類似的問題要更小心：先確認資料、不確定就說不確定。\n${inp.complaints.map(c => `- ${c.from_name ?? '同事'}（${c.reaction}）：${c.text.slice(0, 100)}`).join('\n')}`);
   if (inp.kb.length) parts.push(`【知識庫】\n${inp.kb.map((h, i) => `(${i + 1}) 《${h.title}》${h.source_url ? ' ' + h.source_url : ''}\n${h.text}`).join('\n\n')}`);
   if (inp.radar.length) parts.push(`【競品雷達（部門每週的競品週報）】\n${inp.radar.map(it => `- ${it.week} ${bname(it.brand_id)}｜${it.market}｜${CAT[it.category] ?? it.category}：${it.title}。${it.summary}${it.observation ? ' 觀察：' + it.observation : ''}（${it.confidence === 'verified' ? '多來源' : '單一來源'}）網頁：${inp.radarUrl}/s/${it.id}${it.urls ? ' 原始來源：' + it.urls : ''}`).join('\n')}`);
   parts.push(`【現在的問題】${inp.askerName} 說：${inp.question || '（只傳了圖片）'}`);
@@ -136,7 +138,7 @@ export async function summarize(env: Env, chatName: string, date: string, msgs: 
 **待確認**
 - 有人提出但還沒有答案的問題
 
-規則：只寫對話裡真的有的事，不要推測；人名照紀錄裡的寫；一句話不超過 40 字；閒聊、問候、貼圖不用寫。整篇不要有開場白和結尾，第一行就是「**今日重點**」。
+規則：只寫對話裡真的有的事，不要推測；人名照紀錄裡的寫；一句話不超過 40 字；閒聊、問候、貼圖不用寫。紀錄裡標了「N 人按了表情」的訊息代表大家有共鳴，是提議或決議的話優先寫進去。整篇不要有開場白和結尾，第一行就是「**今日重點**」。
 
 對話紀錄（共 ${msgs.length} 則）：
 ${msgs.map(fmtMsg).join('\n')}` }],

@@ -23,7 +23,7 @@ export async function activeChats(env: Env): Promise<Chat[]> {
   return (await env.DB.prepare('SELECT * FROM chats WHERE active=1 ORDER BY installed_at').all<Chat>()).results;
 }
 
-export interface NewMessage { teams_id: string; chat_id: string; ts: string; from_id: string | null; from_name: string | null; is_bot: boolean; text: string; images: number; source: 'live' | 'graph' }
+export interface NewMessage { teams_id: string; chat_id: string; ts: string; from_id: string | null; from_name: string | null; is_bot: boolean; text: string; images: number; source: 'live' | 'graph'; reactions?: number }
 
 export async function saveMessage(env: Env, m: NewMessage): Promise<boolean> {
   const r = await env.DB.prepare('INSERT OR IGNORE INTO messages (teams_id,chat_id,ts,from_id,from_name,is_bot,text,images,source) VALUES (?,?,?,?,?,?,?,?,?)')
@@ -33,11 +33,15 @@ export async function saveMessage(env: Env, m: NewMessage): Promise<boolean> {
 
 export async function saveMessages(env: Env, list: NewMessage[]): Promise<number> {
   let n = 0;
-  for (let i = 0; i < list.length; i += 40) {
-    const rs = await env.DB.batch(list.slice(i, i + 40).map(m =>
-      env.DB.prepare('INSERT OR IGNORE INTO messages (teams_id,chat_id,ts,from_id,from_name,is_bot,text,images,source) VALUES (?,?,?,?,?,?,?,?,?)')
-        .bind(m.teams_id, m.chat_id, m.ts, m.from_id, m.from_name, m.is_bot ? 1 : 0, m.text, m.images, m.source)));
-    for (const r of rs) n += r.meta.changes ?? 0;
+  for (let i = 0; i < list.length; i += 30) {
+    const slice = list.slice(i, i + 30);
+    const rs = await env.DB.batch([
+      ...slice.map(m => env.DB.prepare('INSERT OR IGNORE INTO messages (teams_id,chat_id,ts,from_id,from_name,is_bot,text,images,source,reactions) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .bind(m.teams_id, m.chat_id, m.ts, m.from_id, m.from_name, m.is_bot ? 1 : 0, m.text, m.images, m.source, m.reactions ?? 0)),
+      // 即時存過的訊息,補抓時把按讚數帶回來
+      ...slice.filter(m => (m.reactions ?? 0) > 0).map(m => env.DB.prepare('UPDATE messages SET reactions=? WHERE teams_id=?').bind(m.reactions, m.teams_id)),
+    ]);
+    for (const r of rs.slice(0, slice.length)) n += r.meta.changes ?? 0;
   }
   return n;
 }
@@ -96,4 +100,25 @@ export async function radarItems(env: Env, brandIds: string[], limit = 12): Prom
      WHERE i.hidden=0 AND w.status='published' ${where}
      ORDER BY i.week DESC, i.rank LIMIT ?`).bind(...brandIds, limit).all<RadarItem>();
   return r.results;
+}
+
+// ---- 表情回饋 ----
+const REACTION_SCORE: Record<string, number> = { like: 1, heart: 1, laugh: 1, surprised: 0, sad: -1, angry: -1 };
+
+export async function saveFeedback(env: Env, f: { chat_id: string; message_id: string; from_id: string | null; from_name: string | null; reaction: string; removed: boolean }) {
+  const score = REACTION_SCORE[f.reaction] ?? 0;
+  await env.DB.prepare('INSERT INTO feedback (chat_id,message_id,from_id,from_name,reaction,score,removed) VALUES (?,?,?,?,?,?,?)')
+    .bind(f.chat_id, f.message_id, f.from_id, f.from_name, f.reaction, score, f.removed ? 1 : 0).run();
+  return score;
+}
+
+/** 最近被按了不滿意表情的回答(給她當提醒) */
+export async function negativeFeedback(env: Env, chatId: string, n = 3): Promise<{ text: string; reaction: string; from_name: string | null }[]> {
+  return (await env.DB.prepare(
+    `SELECT m.text, f.reaction, f.from_name FROM feedback f JOIN messages m ON m.teams_id=f.message_id
+     WHERE f.chat_id=? AND f.removed=0 AND f.score<0 AND f.ts >= datetime('now','-14 days') ORDER BY f.ts DESC LIMIT ?`).bind(chatId, n).all<{ text: string; reaction: string; from_name: string | null }>()).results;
+}
+
+export async function feedbackStats(env: Env, since: string) {
+  return (await env.DB.prepare("SELECT reaction, COUNT(*) AS n FROM feedback WHERE removed=0 AND ts >= ? GROUP BY reaction ORDER BY n DESC").bind(since).all()).results;
 }

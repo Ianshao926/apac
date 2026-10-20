@@ -38,6 +38,8 @@ export interface Activity {
   membersRemoved?: { id: string; name?: string }[];
   action?: string;
   replyToId?: string;
+  reactionsAdded?: { type: string }[];
+  reactionsRemoved?: { type: string }[];
   locale?: string;
 }
 
@@ -65,6 +67,7 @@ export interface Message {
   text: string;
   images: number;
   source: string;
+  reactions: number;
 }
 
 export interface KbDoc {

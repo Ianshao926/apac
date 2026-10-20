@@ -11,7 +11,7 @@ export interface Change {
 }
 
 export const CHANGELOG: Change[] = [
-  { id: 1, date: '2026-10-20', stage: 0, kind: 'birth', text: '會回答問題、看圖、找對話紀錄，每天 18:00 整理大綱，說「記住」就存進知識庫' },
+  { id: 1, date: '2026-10-20', stage: 0, kind: 'birth', text: '會回答問題、看圖、找對話紀錄，每天 18:00 整理大綱，說「記住」就存進知識庫；回覆她的訊息也算在叫她；看得懂大家對她按的表情，大綱會參考被按讚的訊息' },
 ];
 
 export const currentStage = () => CHANGELOG[CHANGELOG.length - 1].stage;

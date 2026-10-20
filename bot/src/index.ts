@@ -1,8 +1,8 @@
 // 亞太寶寶:Teams 群組裡的 AI 同事。
 // /api/messages 收 Teams 的訊息;每天台北 18:00 整理大綱;/admin/* 給 Ian 看狀態、管知識庫。
 import type { Activity, Chat, Env, Message } from './types';
-import { cleanText, fetchImages, graphChatMessages, hasFiles, isMentioned, sendText, sendTyping, verifyBotRequest, type Target } from './teams';
-import { activeChats, deactivateChat, getChat, messagesBetween, radarBrands, radarItems, recentMessages, recentSummaries, saveMessage, saveMessages, saveSummary, searchMessages, upsertChat } from './db';
+import { cleanText, fetchImages, graphChatMessages, hasFiles, isMentioned, isReplyToBot, sendText, sendTyping, verifyBotRequest, type Target } from './teams';
+import { activeChats, deactivateChat, feedbackStats, getChat, messagesBetween, negativeFeedback, radarBrands, radarItems, recentMessages, recentSummaries, saveFeedback, saveMessage, saveMessages, saveSummary, searchMessages, upsertChat } from './db';
 import { answer, summarize, triage } from './brain';
 import { embed, fetchPage, ingest, listDocs, removeDoc, search } from './kb';
 import { monthSpend, recordUsage, spendLine } from './budget';
@@ -15,6 +15,7 @@ const page = (title: string, body: string) => new Response(`<!doctype html><html
 
 const HELP = `我是亞太寶寶，部門群組裡的 AI 同事。可以這樣用我：
 - **@我 問問題**：群組裡的事、競品動態、市場資訊、翻譯、整理，附圖片也看得懂
+- **回覆我的訊息**也算在叫我，不用再 @；對我的回答按 👍 或 👎 我會記住
 - **找紀錄**：「上週誰說要跟泰國代理商聯絡？」這種我會翻對話紀錄
 - **每天 18:00** 我會把當天的對話整理成大綱貼在群組
 - **記住 + 網址或一段文字**：存進知識庫，之後問到我就會引用
@@ -47,9 +48,17 @@ async function onActivity(env: Env, ctx: ExecutionContext, a: Activity) {
       if (!allowedChat(env, chat)) { await sendText(env, t, '嗨，我是亞太寶寶。目前我只服務亞太事業部的群組，這裡我先不說話，有需要請找 Ian 開通。'); return; }
       await sendText(env, t, chat.kind === 'personal'
         ? '嗨，我是亞太寶寶 👋 直接跟我說話就好。打「幫助」看我會什麼。'
-        : `嗨，我是亞太寶寶 👋 從今天起我會跟著這個群組：\n- @我 就能問問題，群組裡的事、競品、市場都可以\n- 每天 18:00 我會把當天的對話整理成大綱\n- 丟網址或資料給我說「記住」，就存進知識庫\n\n打「@亞太寶寶 幫助」看完整說明。`);
+        : `嗨，我是亞太寶寶 👋 從今天起我會跟著這個群組：\n- @我 就能問問題，群組裡的事、競品、市場都可以，附圖也看得懂\n- 每天 18:00 我會把當天的對話整理成大綱\n- 丟網址或資料給我說「記住」，就存進知識庫\n- 回覆我的訊息我會接著聊，對我按表情我也看得到\n\n打「@亞太寶寶 幫助」看完整說明。`);
     }
     if (removed) await deactivateChat(env, a.conversation.id);
+    return;
+  }
+  if (a.type === 'messageReaction') {
+    // 有人對她的訊息按表情。只記下來,不回話。
+    const chat = await getChat(env, a.conversation.id);
+    if (!chat || !a.replyToId) return;
+    for (const r of a.reactionsAdded ?? []) await saveFeedback(env, { chat_id: chat.id, message_id: a.replyToId, from_id: a.from?.aadObjectId ?? a.from?.id ?? null, from_name: a.from?.name ?? null, reaction: r.type, removed: false });
+    for (const r of a.reactionsRemoved ?? []) await saveFeedback(env, { chat_id: chat.id, message_id: a.replyToId, from_id: a.from?.aadObjectId ?? a.from?.id ?? null, from_name: a.from?.name ?? null, reaction: r.type, removed: true });
     return;
   }
   if (a.type !== 'message') return;
@@ -62,7 +71,7 @@ async function onActivity(env: Env, ctx: ExecutionContext, a: Activity) {
     await saveMessage(env, { teams_id: a.id ?? `${a.conversation.id}:${a.timestamp}`, chat_id: chat.id, ts: a.timestamp ?? new Date().toISOString(), from_id: a.from?.aadObjectId ?? a.from?.id ?? null, from_name: a.from?.name ?? null, is_bot: false, text: text || (imageCount ? '[圖片]' : ''), images: imageCount, source: 'live' });
   }
   if (fromBot) return;
-  const addressed = chat.kind === 'personal' || isMentioned(a);
+  const addressed = chat.kind === 'personal' || isMentioned(a) || isReplyToBot(a, env.MS_APP_ID);
   if (!addressed || !allowedChat(env, chat)) return;
   if (!text && !imageCount) return;
 
@@ -104,7 +113,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   if (spend.level === 'stop') return sendText(env, t, `這個月的 AI 額度（US$${spend.budget}）用完了，我先休息到下個月 1 號。急的話請 Ian 調高上限。`);
   await sendTyping(env, t);
 
-  const [recent, brands, images] = await Promise.all([recentMessages(env, chat.id, 30, a.id), radarBrands(env), fetchImages(env, a)]);
+  const [recent, brands, images, complaints] = await Promise.all([recentMessages(env, chat.id, 30, a.id), radarBrands(env), fetchImages(env, a), negativeFeedback(env, chat.id)]);
   const tri = await triage(env, text || '（傳了圖片）', recent, brands, images.length > 0);
   await recordUsage(env, chat.id, 'triage', tri.usage);
   let tier = tri.t.tier;
@@ -120,14 +129,14 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   const seen = new Set(recent.map(m => m.teams_id));
   const r = await answer(env, {
     question: text, askerName: asker, images, recent, found: found.filter(m => !seen.has(m.teams_id)), kb, radar, brands,
-    tier, allowWeb, wantsLong: tri.t.wants_long, radarUrl: env.RADAR_URL, aboutMe: aboutMe(chat.installed_at.slice(0, 10)),
+    tier, allowWeb, wantsLong: tri.t.wants_long, radarUrl: env.RADAR_URL, aboutMe: aboutMe(chat.installed_at.slice(0, 10)), complaints,
   });
   await recordUsage(env, chat.id, 'answer', r.usage);
   let reply = r.text;
   if (hasFiles(a)) reply += '\n\n（附的檔案我現在還讀不了，先貼文字或截圖給我。）';
   if (spend.level === 'tight') reply += '\n\n（這個月額度快用完了，我先不上網查。）';
-  await sendText(env, t, reply);
-  await saveMessage(env, { teams_id: `bot:${a.id}`, chat_id: chat.id, ts: new Date().toISOString(), from_id: null, from_name: env.BOT_NAME, is_bot: true, text: reply, images: 0, source: 'live' });
+  const sentId = await sendText(env, t, reply);
+  await saveMessage(env, { teams_id: sentId ?? `bot:${a.id}`, chat_id: chat.id, ts: new Date().toISOString(), from_id: null, from_name: env.BOT_NAME, is_bot: true, text: reply, images: 0, source: 'live' });
 }
 
 // ---- 每日大綱 ----
@@ -136,7 +145,7 @@ async function runSummary(env: Env, chat: Chat, date: string, opt: { post: boole
   if (opt.backfill) {
     try {
       const gm = await graphChatMessages(env, chat.id, from);
-      const n = await saveMessages(env, gm.filter(m => m.ts >= from && m.ts < to).map(m => ({ teams_id: m.id, chat_id: chat.id, ts: m.ts, from_id: m.from_id, from_name: m.from_name, is_bot: m.is_bot, text: m.text, images: m.images, source: 'graph' as const })));
+      const n = await saveMessages(env, gm.filter(m => m.ts >= from && m.ts < to).map(m => ({ teams_id: m.id, chat_id: chat.id, ts: m.ts, from_id: m.from_id, from_name: m.from_name, is_bot: m.is_bot, text: m.text, images: m.images, source: 'graph' as const, reactions: m.reactions })));
       console.log(`backfill ${chat.id} ${date}: ${gm.length} fetched, ${n} new`);
     } catch (e) { console.warn('backfill failed (RSC 權限沒開?)', String(e).slice(0, 300)); }
   }
@@ -178,15 +187,20 @@ const setMeta = (env: Env, key: string, value: string) => env.DB.prepare("INSERT
 
 /** 部署後有新的 CHANGELOG 就在群組說一次 */
 async function announceGrowth(env: Env, chats: Chat[]): Promise<string[]> {
-  const done = Number((await getMeta(env, 'announced_change')) ?? CHANGELOG[0].id);   // 出生那筆不用宣布
-  const fresh = CHANGELOG.filter(c => c.id > done && c.kind !== 'birth');
   const said: string[] = [];
-  for (const c of fresh) {
-    const text = announcement(c);
-    for (const chat of chats) await sendText(env, { serviceUrl: chat.service_url, conversationId: chat.id }, text);
-    said.push(text);
+  const last = CHANGELOG[CHANGELOG.length - 1]?.id ?? 0;
+  for (const chat of chats) {
+    const key = `announced:${chat.id}`;
+    const joined = chat.installed_at.slice(0, 10);
+    // 第一次:她加入前就會的事不用宣布,從加入那天之後的更新開始
+    const done = Number((await getMeta(env, key)) ?? Math.max(0, ...CHANGELOG.filter(c => c.date <= joined).map(c => c.id)));
+    for (const c of CHANGELOG.filter(c => c.id > done && c.kind !== 'birth')) {
+      const text = announcement(c);
+      await sendText(env, { serviceUrl: chat.service_url, conversationId: chat.id }, text);
+      said.push(text);
+    }
+    if (last > done) await setMeta(env, key, String(last));
   }
-  if (CHANGELOG.length) await setMeta(env, 'announced_change', String(CHANGELOG[CHANGELOG.length - 1].id));
   return said;
 }
 
@@ -246,7 +260,7 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
         const [spend, chats, docs] = await Promise.all([monthSpend(env), activeChats(env), listDocs(env, 20)]);
         const byModel = (await env.DB.prepare("SELECT model, kind, COUNT(*) AS n, SUM(input) AS input, SUM(output) AS output, SUM(searches) AS searches, ROUND(SUM(cost_usd),4) AS usd FROM usage WHERE ts >= ? GROUP BY model, kind ORDER BY usd DESC").bind(`${spend.month}-01`).all()).results;
         const counts = (await env.DB.prepare('SELECT chat_id, COUNT(*) AS n, MAX(ts) AS last FROM messages GROUP BY chat_id').all()).results;
-        return json({ stage: stageName(), changelog: CHANGELOG, spend, by_model: byModel, chats, messages: counts, kb: docs });
+        return json({ stage: stageName(), changelog: CHANGELOG, spend, by_model: byModel, chats, messages: counts, kb: docs, feedback: await feedbackStats(env, `${spend.month}-01`) });
       }
       if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
       const chatId = url.searchParams.get('chat') || (env.ALLOWED_CHATS || '').split(',')[0].trim();
@@ -261,7 +275,7 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
         if (!chat) return json({ error: 'unknown chat' }, 404);
         const since = url.searchParams.get('since') || new Date(Date.now() - 7 * 86400e3).toISOString();
         const gm = await graphChatMessages(env, chat.id, since, 20);
-        const n = await saveMessages(env, gm.map(m => ({ teams_id: m.id, chat_id: chat.id, ts: m.ts, from_id: m.from_id, from_name: m.from_name, is_bot: m.is_bot, text: m.text, images: m.images, source: 'graph' as const })));
+        const n = await saveMessages(env, gm.map(m => ({ teams_id: m.id, chat_id: chat.id, ts: m.ts, from_id: m.from_id, from_name: m.from_name, is_bot: m.is_bot, text: m.text, images: m.images, source: 'graph' as const, reactions: m.reactions })));
         return json({ fetched: gm.length, inserted: n });
       }
       if (path === '/admin/send') {
