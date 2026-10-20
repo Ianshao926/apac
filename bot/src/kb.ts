@@ -88,10 +88,12 @@ export async function search(env: Env, query: string, chatId: string | null, k =
   return top.flatMap(m => { const r = byId.get(m.id); return r ? [{ ...r, score: m.score }] : []; });
 }
 
-/** 抓網頁轉純文字,給「記住 <網址>」用 */
-export async function fetchPage(url: string): Promise<{ title: string; text: string }> {
-  const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; apac-bot/1.0)', accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' }, redirect: 'follow' });
-  if (!res.ok) throw new Error(`網頁回了 ${res.status}`);
+/** 抓網頁轉純文字,給「記住 <網址>」用。雷達自己的頁面走 service binding,其他網址走一般 fetch。 */
+export async function fetchPage(env: Env, url: string): Promise<{ title: string; text: string }> {
+  const init: RequestInit = { headers: { 'user-agent': 'Mozilla/5.0 (compatible; apac-bot/1.0)', accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' }, redirect: 'follow' };
+  const sameSite = (() => { try { return new URL(url).host === new URL(env.RADAR_URL).host; } catch { return false; } })();
+  const res = sameSite ? await env.RADAR_WORKER.fetch(url, init) : await fetch(url, init);
+  if (!res.ok) throw new Error(`網頁回了 ${res.status}：${(await res.text().catch(() => '')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}`);
   const ct = res.headers.get('content-type') || '';
   const raw = (await res.text()).slice(0, 600_000);
   if (/text\/plain/.test(ct)) return { title: url, text: raw };

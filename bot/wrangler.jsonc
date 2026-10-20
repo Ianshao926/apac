@@ -13,6 +13,10 @@
     { "binding": "RADAR", "database_name": "apac-radar", "database_id": "31b3db0f-a4ba-4ffa-9bfc-1b5b546e6a22" }
   ],
   "ai": { "binding": "AI" },
+  // 同帳號的 Worker 互相抓 workers.dev 網址會繞不出去,抓雷達網頁要走這條內部通道。
+  "services": [
+    { "binding": "RADAR_WORKER", "service": "apac-radar" }
+  ],
   "rules": [
     { "type": "Data", "globs": ["**/*.png"], "fallthrough": true }
   ],

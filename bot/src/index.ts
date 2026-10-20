@@ -91,7 +91,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
     const url = /https?:\/\/\S+/u.exec(body)?.[0];
     try {
       const doc = url
-        ? await (async () => { const p = await fetchPage(url); return ingest(env, { title: p.title, text: p.text, kind: 'url', source_url: url, added_by: asker }); })()
+        ? await (async () => { const p = await fetchPage(env, url); return ingest(env, { title: p.title, text: p.text, kind: 'url', source_url: url, added_by: asker }); })()
         : await ingest(env, { title: body.split('\n')[0].slice(0, 60) || '同事提供的資料', text: body, kind: 'text', added_by: asker });
       return sendText(env, t, `記住了：《${doc.title}》，${doc.chars} 字，拆成 ${doc.chunks} 段。之後問到相關的事我會引用。`);
     } catch (e: any) {
@@ -235,7 +235,7 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
       }
       if (path === '/admin/kb') {
         const body = await req.json<{ title?: string; text?: string; url?: string }>().catch(() => ({} as any));
-        if (body.url) { const p = await fetchPage(body.url); return json(await ingest(env, { title: body.title || p.title, text: p.text, kind: 'url', source_url: body.url, added_by: 'admin' })); }
+        if (body.url) { const p = await fetchPage(env, body.url); return json(await ingest(env, { title: body.title || p.title, text: p.text, kind: 'url', source_url: body.url, added_by: 'admin' })); }
         if (body.text) return json(await ingest(env, { title: body.title || body.text.slice(0, 60), text: body.text, kind: 'text', added_by: 'admin' }));
         return json({ error: 'text or url required' }, 400);
       }

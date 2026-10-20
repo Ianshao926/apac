@@ -3,6 +3,7 @@ export interface Env {
   RADAR: D1Database;
   AI: Ai;
   VEC: VectorizeIndex;
+  RADAR_WORKER: Fetcher;
   ANTHROPIC_API_KEY: string;
   MS_APP_ID: string;
   MS_APP_SECRET: string;
