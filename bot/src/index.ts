@@ -77,7 +77,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   const asker = a.from?.name ?? '同事';
   const cmd = text.replace(/[\s。！!]+$/u, '');
 
-  if (/^(幫助|help|你會什麼|你會做什麼|說明)$/i.test(cmd)) return sendText(env, t, HELP);
+  if (/^(幫助|help|你會什麼|你會做什麼|說明)$/i.test(cmd)) return sendText(env, t, `${HELP}\n\n亞太寶寶 ${env.BOT_VERSION}`);
   if (/^(額度|用量|花費|預算)$/.test(cmd)) return sendText(env, t, spendLine(await monthSpend(env)));
   if (/^(今天的大綱|整理今天|今日大綱|整理一下今天)$/.test(cmd)) {
     await sendTyping(env, t);
@@ -209,7 +209,7 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
         const [spend, chats, docs] = await Promise.all([monthSpend(env), activeChats(env), listDocs(env, 20)]);
         const byModel = (await env.DB.prepare("SELECT model, kind, COUNT(*) AS n, SUM(input) AS input, SUM(output) AS output, SUM(searches) AS searches, ROUND(SUM(cost_usd),4) AS usd FROM usage WHERE ts >= ? GROUP BY model, kind ORDER BY usd DESC").bind(`${spend.month}-01`).all()).results;
         const counts = (await env.DB.prepare('SELECT chat_id, COUNT(*) AS n, MAX(ts) AS last FROM messages GROUP BY chat_id').all()).results;
-        return json({ spend, by_model: byModel, chats, messages: counts, kb: docs });
+        return json({ version: env.BOT_VERSION, spend, by_model: byModel, chats, messages: counts, kb: docs });
       }
       if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
       const chatId = url.searchParams.get('chat') || (env.ALLOWED_CHATS || '').split(',')[0].trim();

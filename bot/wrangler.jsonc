@@ -25,6 +25,7 @@
   ],
   "vars": {
     "BOT_NAME": "亞太寶寶",
+    "BOT_VERSION": "1.0",
     "ORG_NAME": "吃茶三千 亞太暨國際發展事業部",
     "MS_APP_ID": "16580072-5cd3-4235-abee-eb3a84f075a1",
     "MS_TENANT_ID": "1e2cbaaf-7e65-4a10-8e69-2f204f5d4d51",
