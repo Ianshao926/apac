@@ -4,7 +4,7 @@ import type { Activity, Chat, Env, Message } from './types';
 import { cleanText, fetchImages, graphChatMessages, hasFiles, isMentioned, sendText, sendTyping, verifyBotRequest, type Target } from './teams';
 import { activeChats, deactivateChat, getChat, messagesBetween, radarBrands, radarItems, recentMessages, recentSummaries, saveMessage, saveMessages, saveSummary, searchMessages, upsertChat } from './db';
 import { answer, summarize, triage } from './brain';
-import { fetchPage, ingest, listDocs, removeDoc, search } from './kb';
+import { embed, fetchPage, ingest, listDocs, removeDoc, search } from './kb';
 import { monthSpend, recordUsage, spendLine } from './budget';
 // @ts-ignore .png 由 wrangler rules 以 Data(ArrayBuffer)匯入
 import LOGO from '../assets/logo-512.png';
@@ -191,6 +191,20 @@ export default {
 
     if (path.startsWith('/admin/')) {
       if (!isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
+      try { return await adminRoute(req, env, url, path); }
+      catch (e: any) { console.error('admin', e); return json({ error: String(e?.message ?? e), stack: String(e?.stack ?? '').split('\n').slice(0, 6) }, 500); }
+    }
+    return new Response('not found', { status: 404 });
+  },
+
+  async scheduled(_ev: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(dailySummaries(env));
+  },
+};
+
+async function adminRoute(req: Request, env: Env, url: URL, path: string): Promise<Response> {
+  {
+    {
       if (path === '/admin/status') {
         const [spend, chats, docs] = await Promise.all([monthSpend(env), activeChats(env), listDocs(env, 20)]);
         const byModel = (await env.DB.prepare("SELECT model, kind, COUNT(*) AS n, SUM(input) AS input, SUM(output) AS output, SUM(searches) AS searches, ROUND(SUM(cost_usd),4) AS usd FROM usage WHERE ts >= ? GROUP BY model, kind ORDER BY usd DESC").bind(`${spend.month}-01`).all()).results;
@@ -233,12 +247,17 @@ export default {
         return json(await search(env, url.searchParams.get('q') || '', chatId, 6));
       }
       if (path === '/admin/summaries') return json(await recentSummaries(env, chatId, 7));
+      if (path === '/admin/selftest') {
+        // 一步一步試:Workers AI 算向量 → Vectorize 查詢 → 雷達資料庫,哪一步壞了直接回報
+        const out: Record<string, unknown> = {};
+        const t0 = Date.now();
+        const [v] = await embed(env, ['測試']); out.embed = { dims: v.length, ms: Date.now() - t0 };
+        const q = await env.VEC.query(v, { topK: 1, namespace: 'kb' }); out.vectorize = { matches: q.count };
+        out.radar = (await radarBrands(env)).length;
+        out.spend = await monthSpend(env);
+        return json(out);
+      }
       return json({ error: 'unknown admin route' }, 404);
     }
-    return new Response('not found', { status: 404 });
-  },
-
-  async scheduled(_ev: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(dailySummaries(env));
-  },
-};
+  }
+}

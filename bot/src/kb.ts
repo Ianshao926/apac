@@ -3,8 +3,8 @@
 import type { Env, KbDoc, KbHit } from './types';
 
 const EMBED_MODEL = '@cf/baai/bge-m3';   // 多語言,1024 維,中文沒問題
-const CHUNK = 450;    // 字
-const OVERLAP = 60;
+const CHUNK = 380;    // 字。bge-m3 一次最多 512 個 token,中文大約一字一個 token,連標題一起要留餘裕
+const OVERLAP = 50;
 
 export function chunkText(text: string): string[] {
   const clean = text.replace(/\r/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -46,7 +46,7 @@ export async function ingest(env: Env, inp: IngestInput): Promise<KbDoc> {
   const r = await env.DB.prepare('INSERT INTO kb_docs (title,kind,source_url,chat_id,added_by,chars,chunks) VALUES (?,?,?,?,?,?,?) RETURNING *')
     .bind(inp.title.slice(0, 120), inp.kind, inp.source_url ?? null, inp.chat_id ?? null, inp.added_by ?? null, inp.text.length, chunks.length).first<KbDoc>();
   const doc = r!;
-  const vectors = await embed(env, chunks.map(c => `${inp.title}\n${c}`));
+  const vectors = await embed(env, chunks.map(c => `${inp.title.slice(0, 40)}\n${c}`));
   const ns = inp.chat_id ? `chat:${inp.chat_id}` : 'kb';
   await env.VEC.upsert(vectors.map((v, i) => ({ id: `${doc.id}-${i}`, values: v, namespace: ns, metadata: { doc: doc.id, title: doc.title, kind: doc.kind, url: inp.source_url ?? '' } })));
   for (let i = 0; i < chunks.length; i += 40) {
