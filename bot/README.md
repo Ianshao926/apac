@@ -24,6 +24,10 @@ Teams 群組裡的 AI 同事。跟競品雷達（`apac-radar`）同一個 repo�
 
 月預算 `BUDGET_USD`（預設 100，含競品雷達）：到 85% 她不上網查、不用 Opus；到 100% 停止回答，等下個月。Anthropic console 的 Spend limit 是真正的硬鎖。
 
+## 成長與稱號
+
+不用版本號。@名字永遠是「亞太寶寶」，稱號跟著世代走：寶寶 → 妹妹 → 姐姐 → 阿姨 → 阿婆。每次更新在 `src/growth.ts` 的 `CHANGELOG` 加一筆（`skill` 學會一件事、`grow` 升一代），部署後她會自己在群組宣布。加入群組後每個月同一天她會報這個月的數字（滿月、一歲有特別版）。
+
 ## 架構
 
 - `src/index.ts` 路由：`/api/messages`（Teams 進來）、`/admin/*`、每日排程。
@@ -60,7 +64,8 @@ npm run deploy:bot
 
 ## 管理
 
-- `GET  /admin/status?k=…` 花費、對話、知識庫。
+- `GET  /admin/status?k=…` 稱號、更新紀錄、花費、對話、知識庫。
+- `POST /admin/announce?k=…` 部署後立刻讓她在群組宣布新學會的事（不呼叫的話每天 18:00 也會自己說）。
 - `POST /admin/summary?k=…&date=YYYY-MM-DD&post=1` 手動跑大綱（`post=0` 只回傳不貼）。
 - `POST /admin/backfill?k=…&since=ISO` 從 Graph 補抓紀錄。
 - `POST /admin/send?k=…&text=…` 測試主動發話。

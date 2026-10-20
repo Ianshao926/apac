@@ -71,6 +71,7 @@ export interface AnswerInput {
   allowWeb: boolean;
   wantsLong: boolean;
   radarUrl: string;
+  aboutMe: string;
 }
 
 const CAT: Record<string, string> = { new_product: '新品', campaign: '行銷', loyalty: '會員' };
@@ -79,6 +80,7 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
   const model = inp.tier === 'fast' ? env.MODEL_FAST : inp.tier === 'deep' ? env.MODEL_DEEP : env.MODEL_MAIN;
   const bname = (id: string) => inp.brands.find(b => b.id === id)?.name_zh ?? id;
   const parts: string[] = [];
+  parts.push(`【關於你自己】${inp.aboutMe}`);
   parts.push(`【這個對話最近的紀錄】\n${inp.recent.map(fmtMsg).join('\n') || '（還沒有紀錄）'}`);
   if (inp.found.length) parts.push(`【關鍵字找到的較早對話】\n${inp.found.map(fmtMsg).join('\n')}`);
   if (inp.kb.length) parts.push(`【知識庫】\n${inp.kb.map((h, i) => `(${i + 1}) 《${h.title}》${h.source_url ? ' ' + h.source_url : ''}\n${h.text}`).join('\n\n')}`);

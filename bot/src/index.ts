@@ -6,6 +6,7 @@ import { activeChats, deactivateChat, getChat, messagesBetween, radarBrands, rad
 import { answer, summarize, triage } from './brain';
 import { embed, fetchPage, ingest, listDocs, removeDoc, search } from './kb';
 import { monthSpend, recordUsage, spendLine } from './budget';
+import { CHANGELOG, aboutMe, announcement, monthlyNote, monthsSince, selfLine, stageName } from './growth';
 // @ts-ignore .png 由 wrangler rules 以 Data(ArrayBuffer)匯入
 import LOGO from '../assets/logo-512.png';
 
@@ -77,7 +78,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   const asker = a.from?.name ?? '同事';
   const cmd = text.replace(/[\s。！!]+$/u, '');
 
-  if (/^(幫助|help|你會什麼|你會做什麼|說明)$/i.test(cmd)) return sendText(env, t, `${HELP}\n\n亞太寶寶 ${env.BOT_VERSION}`);
+  if (/^(幫助|help|你會什麼|你會做什麼|說明)$/i.test(cmd)) return sendText(env, t, `${HELP}\n\n${selfLine(chat.installed_at.slice(0, 10))}`);
   if (/^(額度|用量|花費|預算)$/.test(cmd)) return sendText(env, t, spendLine(await monthSpend(env)));
   if (/^(今天的大綱|整理今天|今日大綱|整理一下今天)$/.test(cmd)) {
     await sendTyping(env, t);
@@ -119,7 +120,7 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   const seen = new Set(recent.map(m => m.teams_id));
   const r = await answer(env, {
     question: text, askerName: asker, images, recent, found: found.filter(m => !seen.has(m.teams_id)), kb, radar, brands,
-    tier, allowWeb, wantsLong: tri.t.wants_long, radarUrl: env.RADAR_URL,
+    tier, allowWeb, wantsLong: tri.t.wants_long, radarUrl: env.RADAR_URL, aboutMe: aboutMe(chat.installed_at.slice(0, 10)),
   });
   await recordUsage(env, chat.id, 'answer', r.usage);
   let reply = r.text;
@@ -159,14 +160,50 @@ async function runSummary(env: Env, chat: Chat, date: string, opt: { post: boole
 
 async function dailySummaries(env: Env) {
   const date = TPE_DATE();
-  for (const chat of await activeChats(env)) {
-    if (!chat.summary_enabled || chat.kind === 'personal' || !allowedChat(env, chat) || chat.last_summary_date === date) continue;
+  const chats = (await activeChats(env)).filter(c => c.kind !== 'personal' && allowedChat(env, c));
+  await announceGrowth(env, chats).catch(e => console.error('announce', e));
+  for (const chat of chats) {
+    if (!chat.summary_enabled || chat.last_summary_date === date) continue;
     try {
       const r = await runSummary(env, chat, date, { post: true, backfill: true });
       if (!r.text) await env.DB.prepare('UPDATE chats SET last_summary_date=? WHERE id=?').bind(date, chat.id).run();
       console.log(JSON.stringify({ chat: chat.id, date, ...r, text: undefined }));
     } catch (e) { console.error('summary failed', chat.id, e); }
+    await monthlyRecap(env, chat, date).catch(e => console.error('monthly', e));
   }
+}
+
+const getMeta = (env: Env, key: string) => env.DB.prepare('SELECT value FROM meta WHERE key=?').bind(key).first<{ value: string }>().then(r => r?.value ?? null);
+const setMeta = (env: Env, key: string, value: string) => env.DB.prepare("INSERT INTO meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')").bind(key, value).run();
+
+/** 部署後有新的 CHANGELOG 就在群組說一次 */
+async function announceGrowth(env: Env, chats: Chat[]): Promise<string[]> {
+  const done = Number((await getMeta(env, 'announced_change')) ?? CHANGELOG[0].id);   // 出生那筆不用宣布
+  const fresh = CHANGELOG.filter(c => c.id > done && c.kind !== 'birth');
+  const said: string[] = [];
+  for (const c of fresh) {
+    const text = announcement(c);
+    for (const chat of chats) await sendText(env, { serviceUrl: chat.service_url, conversationId: chat.id }, text);
+    said.push(text);
+  }
+  if (CHANGELOG.length) await setMeta(env, 'announced_change', String(CHANGELOG[CHANGELOG.length - 1].id));
+  return said;
+}
+
+/** 加入群組後每個月同一天,報這個月的數字 */
+async function monthlyRecap(env: Env, chat: Chat, date: string) {
+  const join = chat.installed_at.slice(0, 10);
+  const months = monthsSince(join, date);
+  if (!months) return;
+  const key = `recap:${chat.id}`;
+  if ((await getMeta(env, key)) === String(months)) return;
+  const since = new Date(Date.parse(date + 'T00:00:00+08:00') - 30 * 86400e3).toISOString();
+  const a = await env.DB.prepare("SELECT COUNT(*) AS n FROM usage WHERE chat_id=? AND kind='answer' AND ts >= ?").bind(chat.id, since).first<{ n: number }>();
+  const u = await env.DB.prepare('SELECT COUNT(DISTINCT from_id) AS u FROM messages WHERE chat_id=? AND is_bot=0 AND ts >= ?').bind(chat.id, since).first<{ u: number }>();
+  const d = await env.DB.prepare('SELECT COUNT(*) AS n FROM summaries WHERE chat_id=? AND created_at >= ?').bind(chat.id, since).first<{ n: number }>();
+  const k = await env.DB.prepare("SELECT COUNT(*) AS n FROM kb_docs WHERE kind IN ('url','text') AND created_at >= ?").bind(since).first<{ n: number }>();
+  await sendText(env, { serviceUrl: chat.service_url, conversationId: chat.id }, monthlyNote(months, { answers: a?.n ?? 0, askers: u?.u ?? 0, digests: d?.n ?? 0, kb: k?.n ?? 0 }));
+  await setMeta(env, key, String(months));
 }
 
 export default {
@@ -209,7 +246,7 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
         const [spend, chats, docs] = await Promise.all([monthSpend(env), activeChats(env), listDocs(env, 20)]);
         const byModel = (await env.DB.prepare("SELECT model, kind, COUNT(*) AS n, SUM(input) AS input, SUM(output) AS output, SUM(searches) AS searches, ROUND(SUM(cost_usd),4) AS usd FROM usage WHERE ts >= ? GROUP BY model, kind ORDER BY usd DESC").bind(`${spend.month}-01`).all()).results;
         const counts = (await env.DB.prepare('SELECT chat_id, COUNT(*) AS n, MAX(ts) AS last FROM messages GROUP BY chat_id').all()).results;
-        return json({ version: env.BOT_VERSION, spend, by_model: byModel, chats, messages: counts, kb: docs });
+        return json({ stage: stageName(), changelog: CHANGELOG, spend, by_model: byModel, chats, messages: counts, kb: docs });
       }
       if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
       const chatId = url.searchParams.get('chat') || (env.ALLOWED_CHATS || '').split(',')[0].trim();
@@ -247,6 +284,10 @@ async function adminRoute(req: Request, env: Env, url: URL, path: string): Promi
         return json(await search(env, url.searchParams.get('q') || '', chatId, 6));
       }
       if (path === '/admin/summaries') return json(await recentSummaries(env, chatId, 7));
+      if (path === '/admin/announce') {
+        const chats = (await activeChats(env)).filter(c => c.kind !== 'personal' && allowedChat(env, c));
+        return json({ chats: chats.length, said: await announceGrowth(env, chats) });
+      }
       if (path === '/admin/selftest') {
         // 一步一步試:Workers AI 算向量 → Vectorize 查詢 → 雷達資料庫,哪一步壞了直接回報
         const out: Record<string, unknown> = {};

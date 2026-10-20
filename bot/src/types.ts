@@ -10,7 +10,6 @@ export interface Env {
   MS_TENANT_ID: string;
   ADMIN_TOKEN: string;
   BOT_NAME: string;
-  BOT_VERSION: string;
   ORG_NAME: string;
   ALLOWED_CHATS: string;
   BUDGET_USD: string;
