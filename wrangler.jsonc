@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "apac-radar",
   "main": "src/index.ts",
+  "account_id": "8d0571416b17f5f1ff1c24420320074f",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },

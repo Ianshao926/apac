@@ -43,8 +43,7 @@ Teams 群組裡的 AI 同事。跟競品雷達（`apac-radar`）同一個 repo�
 
 ```powershell
 git pull origin claude/availability-check-7vo48i
-Remove-Item Env:CLOUDFLARE_API_TOKEN -ErrorAction SilentlyContinue
-$env:CLOUDFLARE_ACCOUNT_ID = "8d0571416b17f5f1ff1c24420320074f"
+Remove-Item Env:CLOUDFLARE_API_TOKEN -ErrorAction SilentlyContinue   # 這台電腦有另一個帳號的 token,每開新視窗都要拿掉
 
 npx wrangler vectorize create apac-bot-kb --dimensions=1024 --metric=cosine
 npm run migrate:bot
