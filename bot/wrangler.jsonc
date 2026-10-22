@@ -33,6 +33,8 @@
     "ALLOWED_CHATS": "19:386c4c92501d4f42a3985c07f1148737@thread.v2",
     // 整個 Anthropic 帳號的月預算(含競品雷達)。到 85% 她會省著用,到 100% 停下來。
     "BUDGET_USD": "100",
+    // 一天最多上網搜尋幾次(每次 US$0.01),超過就當天不上網
+    "DAILY_SEARCH_CAP": "60",
     "RADAR_URL": "https://apac-radar.ccsc.workers.dev",
     "MODEL_FAST": "claude-haiku-5-5",
     "MODEL_MAIN": "claude-sonnet-5-5",

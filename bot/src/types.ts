@@ -13,6 +13,7 @@ export interface Env {
   ORG_NAME: string;
   ALLOWED_CHATS: string;
   BUDGET_USD: string;
+  DAILY_SEARCH_CAP: string;
   RADAR_URL: string;
   MODEL_FAST: string;
   MODEL_MAIN: string;

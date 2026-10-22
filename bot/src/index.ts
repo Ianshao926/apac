@@ -136,6 +136,11 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   if (tri.t.needs_web && tier === 'fast') tier = 'main';
   let allowWeb = tier !== 'fast';
   if (spend.level === 'tight') { if (tier === 'deep') tier = 'main'; allowWeb = false; }
+  // 每日搜尋上限,避免一天被問爆
+  if (allowWeb) {
+    const today = await env.DB.prepare("SELECT COALESCE(SUM(searches),0) AS n FROM usage WHERE ts >= date('now')").first<{ n: number }>();
+    if ((today?.n ?? 0) >= Number(env.DAILY_SEARCH_CAP || '60')) allowWeb = false;
+  }
 
   const q = tri.t.search_query || text;
   const [found, kb, radar] = await Promise.all([
