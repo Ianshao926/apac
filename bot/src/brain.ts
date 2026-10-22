@@ -4,9 +4,11 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import type { Env, ImageData, KbHit, Message, Usage } from './types';
 import type { RadarBrand, RadarItem } from './db';
-import { twText } from '../../src/zh';
+import { toTW, twText } from '../../src/zh';
 
-const PERSONA = `你是「亞太寶寶」，吃茶三千亞太暨國際發展事業部的新同事，住在部門的 Teams 群組裡，協助大家處理亞太各市場（新加坡、馬來西亞、泰國、越南、菲律賓、香港、日本等）的展店、代理商、競品與行銷工作。
+const PERSONA = `【最重要的規則】所有輸出一律使用台灣的繁體中文，絕對不可以出現任何簡體字；用語也要是台灣的說法。
+
+你是「亞太寶寶」，吃茶三千亞太暨國際發展事業部的新同事，住在部門的 Teams 群組裡，協助大家處理亞太各市場（新加坡、馬來西亞、泰國、越南、菲律賓、香港、日本等）的展店、代理商、競品與行銷工作。
 
 個性：輕鬆、有溫度、偶爾一點幽默，像一個反應快又靠得住的年輕同事；但內容一定專業、具體、有依據，不打官腔也不裝可愛。
 
@@ -90,6 +92,7 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
   if (inp.kb.length) parts.push(`【知識庫】\n${inp.kb.map((h, i) => `(${i + 1}) 《${h.title}》${h.source_url ? ' ' + h.source_url : ''}\n${h.text}`).join('\n\n')}`);
   if (inp.radar.length) parts.push(`【競品雷達（部門每週的競品週報）】\n${inp.radar.map(it => `- ${it.week} ${bname(it.brand_id)}｜${it.market}｜${CAT[it.category] ?? it.category}：${it.title}。${it.summary}${it.observation ? ' 觀察：' + it.observation : ''}（${it.confidence === 'verified' ? '多來源' : '單一來源'}）網頁：${inp.radarUrl}/s/${it.id}${it.urls ? ' 原始來源：' + it.urls : ''}`).join('\n')}`);
   parts.push(`【現在的問題】${inp.askerName} 說：${inp.question || '（只傳了圖片）'}`);
+  parts.push('請用台灣繁體中文回答，一個簡體字都不可以有。');
   if (inp.wantsLong) parts.push('對方要詳細的回答，可以寫到 400 字，分段、用清單。');
 
   const content: Anthropic.ContentBlockParam[] = [
@@ -119,8 +122,10 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
     final = res; break;
   }
   if (!final) return { text: '這題查太久了，我先停下來。可以把問題拆小一點再問我一次。', usage };
-  const text = final.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
-  return { text: twText(text) || '（我想不出要說什麼，再講清楚一點？）', usage };
+  const raw = final.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+  // 模型漏寫簡體時記一筆,之後拿來調整分流(哪個模型最常犯)
+  if (toTW(raw) !== raw) console.warn(JSON.stringify({ simplified_output: true, model, sample: raw.slice(0, 60) }));
+  return { text: twText(raw) || '（我想不出要說什麼，再講清楚一點？）', usage };
 }
 
 export async function summarize(env: Env, chatName: string, date: string, msgs: Message[]): Promise<{ text: string; usage: Usage }> {

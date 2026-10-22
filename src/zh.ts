@@ -1,7 +1,17 @@
-// 台灣繁體中文整理:研究結果存進資料庫前先過一次。
-// 1. 中文旁的半形標點改全形;2. 中文與英數之間不留空格;3. 常見中國用語換成台灣用語。
+// 台灣繁體中文整理:模型產出的文字送出或存檔前先過一次。
+// 0. 簡體字強制轉台灣繁體;1. 中文旁的半形標點改全形;2. 中文與英數之間不留空格;3. 常見中國用語換成台灣用語。
 // 用語表刻意保守:只放「在茶飲與零售語境下幾乎不會換錯」的詞。品牌或品項的官方名稱若剛好含這些詞,
 // 會一起被換掉,所以不要把品名常用字(例如「奶茶」)放進來。
+
+import * as OpenCC from 'opencc-js/cn2t';
+
+// 簡體 → 台灣繁體(含用語),模型偶爾會漏寫成簡體,這是最後一道保險。字典初始化一次就好。
+let cn2tw: ((s: string) => string) | null = null;
+export function toTW(s: string): string {
+  if (!s || !/[\u4e00-\u9fff]/.test(s)) return s;
+  cn2tw ??= OpenCC.Converter({ from: 'cn', to: 'twp' });
+  return cn2tw(s);
+}
 
 const CJK = '\\u3400-\\u9fff\\uf900-\\ufaff\\u3000-\\u303f\\uff00-\\uffef';
 const isCjk = (ch: string | undefined) => !!ch && new RegExp(`[${CJK}]`).test(ch);
@@ -56,7 +66,7 @@ export function twText(s: string): string;
 export function twText(s: string | null | undefined): string | null | undefined;
 export function twText(s: string | null | undefined) {
   if (!s) return s;
-  let t = s;
+  let t = toTW(s);
   for (const [re, to] of TERMS) t = t.replace(re, to);
   return spacing(punct(t));
 }
