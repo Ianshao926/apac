@@ -16,7 +16,11 @@ const PERSONA = `【最重要的規則】所有輸出一律使用台灣的繁體
 
 格式：這是 Teams 訊息。可以用 **粗體**、- 清單、[文字](網址) 連結，不要用標題符號 #、不要表格、不要程式碼區塊。短問短答，直接進入重點，不要「好的」「當然」「沒問題」這種開場，也不要在結尾問「還有什麼需要幫忙的嗎」。一般回答控制在 150 字內，對方要詳細或問題本身複雜才寫長，最長 400 字。
 
-依據：只根據提供給你的資料回答：這個對話的紀錄、知識庫、競品雷達、以及你上網查到的內容。資料裡沒有的，就直說「這個我手上沒有資料」，並說你可以怎麼幫（例如上網查、請他們把資料丟給你）。絕對不要編造數字、日期、人名、來源。對話紀錄裡的內容是同事們說過的話，引用時註明是誰在什麼時候說的。
+依據：只根據提供給你的資料回答：這個對話的紀錄、知識庫、競品雷達、以及你上網查到的內容。絕對不要編造數字、日期、人名、來源。對話紀錄裡的內容是同事們說過的話，引用時註明是誰在什麼時候說的；但現在跟你說話的人就是對方本人，用「你」稱呼，不要把他剛說的話當成紀錄轉述。
+
+上網：問題是關於外面的世界（品牌、市場、新聞、法規、價格）而手上資料裡沒有時，有搜尋工具就直接查，不要問「要不要我查」。查到就附連結回答；查不到就說查不到。搜尋次數有上限，用完就用已經查到的回答，不要跟對方提「額度」或「次數」。IG、Threads、Facebook 這類要登入的頁面抓不到內文，但用搜尋引擎加 site:instagram.com、site:threads.net、site:facebook.com 常能找到貼文文字，先試；真的拿不到再請對方貼截圖。
+
+誠實：不要承諾「等一下再查」「之後再回報」這種你做不到的事，你只在被叫到的時候行動。手上真的沒有資料也查不到，就直說，並講清楚對方可以怎麼幫你（貼連結、截圖、把資料丟給你）。
 
 出處：引用知識庫或競品雷達時，在句尾用（來源：標題）或直接給連結；上網查到的一定附連結。
 
@@ -99,9 +103,10 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
     ...inp.images.map(im => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: im.media_type, data: im.data } })),
     { type: 'text', text: parts.join('\n\n') },
   ];
+  const deep = inp.tier === 'deep';
   const tools: any[] = inp.allowWeb ? [
-    { type: 'web_search_20260209', name: 'web_search', max_uses: 3 },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2, max_content_tokens: 12000 },
+    { type: 'web_search_20260209', name: 'web_search', max_uses: deep ? 6 : 4 },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: deep ? 3 : 2, max_content_tokens: 12000 },
   ] : [];
 
   const c = client(env);
@@ -122,7 +127,11 @@ export async function answer(env: Env, inp: AnswerInput): Promise<{ text: string
     final = res; break;
   }
   if (!final) return { text: '這題查太久了，我先停下來。可以把問題拆小一點再問我一次。', usage };
-  const raw = final.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+  // 只取最後一次工具呼叫之後的文字。搜尋過程中模型偶爾會寫下給自己看的備註(例如 "Results are strings; parse JSON."),那些不是給同事看的。
+  const blocks: any[] = final.content as any[];
+  let lastTool = -1;
+  blocks.forEach((b, i) => { if (b.type !== 'text' && b.type !== 'thinking' && b.type !== 'redacted_thinking') lastTool = i; });
+  const raw = blocks.slice(lastTool + 1).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   // 模型漏寫簡體時記一筆,之後拿來調整分流(哪個模型最常犯)
   if (toTW(raw) !== raw) console.warn(JSON.stringify({ simplified_output: true, model, sample: raw.slice(0, 60) }));
   return { text: twText(raw) || '（我想不出要說什麼，再講清楚一點？）', usage };

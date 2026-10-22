@@ -132,7 +132,9 @@ async function handleAsk(env: Env, chat: Chat, a: Activity, text: string, t: Tar
   const tri = await triage(env, text || '（傳了圖片）', recent, brands, images.length > 0);
   await recordUsage(env, chat.id, 'triage', tri.usage);
   let tier = tri.t.tier;
-  let allowWeb = tri.t.needs_web;
+  // 分流說需要上網就升到 deep;其餘非閒聊的問題也給她搜尋工具,要不要用由她判斷(沒用就不花錢)
+  if (tri.t.needs_web && tier === 'fast') tier = 'main';
+  let allowWeb = tier !== 'fast';
   if (spend.level === 'tight') { if (tier === 'deep') tier = 'main'; allowWeb = false; }
 
   const q = tri.t.search_query || text;
