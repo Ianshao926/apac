@@ -115,13 +115,13 @@ export async function saveReport(env: Env, week: string, brand: Brand, report: B
 
 function hostOf(u: string) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return '\u0000'; } }
 
-export async function recordRun(env: Env, week: string, brandId: string, status: 'ok' | 'quiet' | 'error', data: { items?: number; input?: number; output?: number; searches?: number; error?: string }) {
+export async function recordRun(env: Env, week: string, brandId: string, status: 'ok' | 'quiet' | 'error', data: { items?: number; input?: number; output?: number; searches?: number; cache_read?: number; cache_write?: number; error?: string }) {
   await env.DB.prepare(
-    `INSERT INTO runs (week,brand_id,status,items_found,input_tokens,output_tokens,searches,error,finished_at)
-     VALUES (?,?,?,?,?,?,?,?,datetime('now'))
+    `INSERT INTO runs (week,brand_id,status,items_found,input_tokens,output_tokens,searches,cache_read,cache_write,error,finished_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))
      ON CONFLICT(week,brand_id) DO UPDATE SET status=excluded.status, items_found=excluded.items_found, input_tokens=excluded.input_tokens,
-       output_tokens=excluded.output_tokens, searches=excluded.searches, error=excluded.error, finished_at=excluded.finished_at`)
-    .bind(week, brandId, status, data.items ?? 0, data.input ?? null, data.output ?? null, data.searches ?? null, data.error ?? null).run();
+       output_tokens=excluded.output_tokens, searches=excluded.searches, cache_read=excluded.cache_read, cache_write=excluded.cache_write, error=excluded.error, finished_at=excluded.finished_at`)
+    .bind(week, brandId, status, data.items ?? 0, data.input ?? null, data.output ?? null, data.searches ?? null, data.cache_read ?? null, data.cache_write ?? null, data.error ?? null).run();
 }
 
 export async function loadBundle(env: Env, week: string): Promise<IssueBundle | null> {

@@ -31,7 +31,7 @@ async function runOneBrand(env: Env, week: string, brandId?: string) {
   try {
     const r = await researchBrand(env, brand, week, issue.range_start, issue.range_end);
     const stats = await saveReport(env, week, brand, r.report);
-    await recordRun(env, week, brand.id, r.report.items.length ? 'ok' : 'quiet', { items: stats.inserted, input: r.usage.input, output: r.usage.output, searches: r.usage.searches });
+    await recordRun(env, week, brand.id, r.report.items.length ? 'ok' : 'quiet', { items: stats.inserted, input: r.usage.input, output: r.usage.output, searches: r.usage.searches, cache_read: r.usage.cache_read, cache_write: r.usage.cache_write });
     return { week, brand: brand.id, status: r.report.items.length ? 'ok' : 'quiet', found: r.report.items.length, ...stats, quiet_reason: r.report.quiet_reason, usage: r.usage, model: r.model, ms: Date.now() - t0, remaining: pending.filter(p => p.id !== brand.id).length };
   } catch (e: any) {
     const msg = String(e?.message ?? e).slice(0, 900);

@@ -7,9 +7,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   // 每週一 UTC 00:00–00:58 每 2 分鐘起跑一個品牌(30 格,17 個品牌),台北 08:00 開始,約 08:40 全部跑完,剩下的格子用來重試失敗的品牌。
+  // 注意 Cloudflare 的星期是 1 = 週日,所以用 MON 這種寫法,不要用數字。
   // 免費方案每次呼叫只有 50 個子請求,所以一次一個品牌;前一個還沒跑完也沒關係,runs 表的認領機制會避開同一個品牌。
   // 09:00 台北的推送不自動,等 Ian 看過預覽後用 /admin/publish 觸發。
-  "triggers": { "crons": ["*/2 0 * * 1"] },
+  "triggers": { "crons": ["*/2 0 * * MON"] },
   "d1_databases": [
     { "binding": "DB", "database_name": "apac-radar", "database_id": "31b3db0f-a4ba-4ffa-9bfc-1b5b546e6a22", "migrations_dir": "migrations" }
   ],

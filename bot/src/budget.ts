@@ -26,10 +26,9 @@ export async function monthSpend(env: Env): Promise<Spend> {
   const month = new Date().toISOString().slice(0, 7);
   const start = `${month}-01`;
   const b = await env.DB.prepare('SELECT COALESCE(SUM(cost_usd),0) AS c FROM usage WHERE ts >= ?').bind(start).first<{ c: number }>();
-  // 雷達那邊沒記 cache,用 Opus 原價估,會略高估,保守一點剛好。
-  const r = await env.RADAR.prepare('SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o, COALESCE(SUM(searches),0) AS s FROM runs WHERE finished_at >= ?').bind(start).first<{ i: number; o: number; s: number }>()
-    .catch(() => ({ i: 0, o: 0, s: 0 }));
-  const radar = costOf({ model: 'claude-opus-5-5', input: r?.i ?? 0, output: r?.o ?? 0, cache_read: 0, cache_write: 0, searches: r?.s ?? 0 });
+  const r = await env.RADAR.prepare('SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o, COALESCE(SUM(searches),0) AS s, COALESCE(SUM(cache_read),0) AS cr, COALESCE(SUM(cache_write),0) AS cw FROM runs WHERE finished_at >= ?').bind(start).first<{ i: number; o: number; s: number; cr: number; cw: number }>()
+    .catch(() => ({ i: 0, o: 0, s: 0, cr: 0, cw: 0 }));
+  const radar = costOf({ model: 'claude-opus-5-5', input: r?.i ?? 0, output: r?.o ?? 0, cache_read: r?.cr ?? 0, cache_write: r?.cw ?? 0, searches: r?.s ?? 0 });
   const bot = b?.c ?? 0;
   const budget = Math.max(1, Number(env.BUDGET_USD || '100'));
   const total = bot + radar;

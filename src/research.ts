@@ -25,7 +25,7 @@ const SYSTEM = `你是「亞太競品雷達」的資深情報編輯,服務對象
 
 export interface ResearchResult {
   report: BrandReport;
-  usage: { input: number; output: number; searches: number };
+  usage: { input: number; output: number; searches: number; cache_read: number; cache_write: number };
   model: string;
 }
 
@@ -51,7 +51,7 @@ export async function researchBrand(env: Env, brand: Brand, week: string, start:
 
   let messages: any[] = [{ role: 'user', content: user }];
   let final: Anthropic.Message | null = null;
-  let input = 0, output = 0, searches = 0;
+  let input = 0, output = 0, searches = 0, cacheRead = 0, cacheWrite = 0;
 
   for (let i = 0; i < 4; i++) {
     const res = await client.messages.create({
@@ -63,6 +63,7 @@ export async function researchBrand(env: Env, brand: Brand, week: string, start:
       output_config: { format: zodOutputFormat(BrandReportSchema) },
     } as any);
     input += res.usage.input_tokens; output += res.usage.output_tokens;
+    cacheRead += (res.usage as any).cache_read_input_tokens ?? 0; cacheWrite += (res.usage as any).cache_creation_input_tokens ?? 0;
     searches += (res.usage as any).server_tool_use?.web_search_requests ?? 0;
     if (res.stop_reason === 'pause_turn') {
       messages = [...messages, { role: 'assistant', content: res.content }];
@@ -78,5 +79,5 @@ export async function researchBrand(env: Env, brand: Brand, week: string, start:
   let parsed: unknown;
   try { parsed = JSON.parse(text.text); } catch { throw new Error('final text is not JSON: ' + text.text.slice(0, 200)); }
   const report = BrandReportSchema.parse(parsed);
-  return { report, usage: { input, output, searches }, model: final.model };
+  return { report, usage: { input, output, searches, cache_read: cacheRead, cache_write: cacheWrite }, model: final.model };
 }
