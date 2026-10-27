@@ -17,6 +17,7 @@ const CJK = '\\u3400-\\u9fff\\uf900-\\ufaff\\u3000-\\u303f\\uff00-\\uffef';
 const isCjk = (ch: string | undefined) => !!ch && new RegExp(`[${CJK}]`).test(ch);
 
 const TERMS: [RegExp, string][] = [
+  [/臺/g, '台'],          // OpenCC 的台灣標準用「臺」,媒體與一般書寫慣用「台」
   [/門店/g, '門市'],
   [/芝士/g, '起司'],
   [/順滑/g, '滑順'],
