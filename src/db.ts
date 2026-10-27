@@ -2,7 +2,7 @@ import type { Brand, BrandStat, Env, Issue, IssueBundle, IssueSummary, Item, Ite
 import { parseWeekId, previousWeeks, weekRange } from './week';
 import { twText } from './zh';
 import type { BrandReport } from './schema';
-import { heroImageOf, storeImages, type Candidate } from './images';
+import { pageImages, storeImages, type Candidate } from './images';
 
 export async function allBrands(env: Env): Promise<Brand[]> {
   const r = await env.DB.prepare('SELECT * FROM brands WHERE active=1 ORDER BY sort').all<Brand>();
@@ -98,15 +98,17 @@ export async function saveReport(env: Env, week: string, brand: Brand, report: B
     // 圖片:模型給的直接圖 → 來源頁的主圖
     const cands: Candidate[] = it.image_urls.slice(0, 4).map(u => ({ url: u, credit: it.image_credit ? `${it.image_credit}` : '官方素材', official: /official|官方/.test(it.image_credit ?? '') || it.sources.some(s => s.is_official && u.includes(hostOf(s.url))) }));
     if (cands.length < 2) {
-      for (const s of it.sources.slice(0, 2)) {
-        const hero = await heroImageOf(s.url);
-        if (hero) cands.push({ url: hero, credit: `${s.is_official ? '官方素材' : '報導配圖'} · ${s.publisher}`, official: s.is_official, page: s.url });
+      // 官方來源先試,最多看三頁
+      const pages = it.sources.slice().sort((a, b) => Number(b.is_official) - Number(a.is_official)).slice(0, 3);
+      for (const s of pages) {
+        for (const u of await pageImages(s.url, 2)) cands.push({ url: u, credit: `${s.is_official ? '官方素材' : '報導配圖'} · ${s.publisher}`, official: s.is_official, page: s.url });
+        if (cands.length >= 3) break;
       }
     }
     const stored = await storeImages(env, id, cands, 3);
     stored.forEach((im, i) => stmts.push(env.DB.prepare(
-      'INSERT OR IGNORE INTO item_images (item_id,kv_key,content_type,bytes,source_url,page_url,credit,is_official,sort) VALUES (?,?,?,?,?,?,?,?,?)')
-      .bind(id, im.kv_key, im.content_type, im.bytes, im.source_url, im.page_url, im.credit, im.is_official, i + 1)));
+      'INSERT OR IGNORE INTO item_images (item_id,kv_key,content_type,bytes,width,height,source_url,page_url,credit,is_official,sort) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(id, im.kv_key, im.content_type, im.bytes, im.width, im.height, im.source_url, im.page_url, im.credit, im.is_official, i + 1)));
     stats.images += stored.length;
   }
   if (stmts.length) await env.DB.batch(stmts);
@@ -169,7 +171,7 @@ export async function listIssues(env: Env, drafts: boolean): Promise<IssueSummar
        (SELECT t.title FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_title,
        (SELECT t.brand_id FROM items t WHERE t.week=i.week AND t.hidden=0 ${LEAD_ORDER}) AS lead_brand,
        (SELECT m.kv_key FROM items t JOIN item_images m ON m.item_id=t.id WHERE t.week=i.week AND t.hidden=0
-          ORDER BY m.bytes DESC LIMIT 1) AS cover_key
+          ORDER BY (CASE WHEN m.width IS NOT NULL AND m.height >= m.width * 0.95 THEN 0 ELSE 1 END), m.bytes DESC LIMIT 1) AS cover_key
      FROM issues i WHERE (? = 1 OR i.status='published') ORDER BY i.week DESC`).bind(drafts ? 1 : 0).all<IssueSummary>();
   return r.results;
 }
@@ -196,4 +198,31 @@ export async function brandStats(env: Env, drafts: boolean): Promise<BrandStat[]
 export async function weekOfItem(env: Env, id: string): Promise<string | null> {
   const r = await env.DB.prepare('SELECT week FROM items WHERE id=? AND hidden=0').bind(id).first<{ week: string }>();
   return r?.week ?? null;
+}
+
+/** 上一、二週已收錄的標題,給研究用,避免同一件事重複收 */
+export async function recentTitles(env: Env, brandId: string, week: string): Promise<string[]> {
+  const weeks = previousWeeks(week, 2);
+  if (!weeks.length) return [];
+  const r = await env.DB.prepare(`SELECT title FROM items WHERE brand_id=? AND hidden=0 AND week IN (${weeks.map(() => '?').join(',')}) ORDER BY week DESC`).bind(brandId, ...weeks).all<{ title: string }>();
+  return r.results.map(x => x.title);
+}
+
+/** 重新替一則動態找圖(來源頁的 og:image / 內文圖),已有圖的接在後面 */
+export async function refetchImages(env: Env, itemId: string): Promise<number> {
+  const srcs = (await env.DB.prepare('SELECT url, publisher, is_official FROM item_sources WHERE item_id=? ORDER BY is_official DESC').bind(itemId).all<{ url: string; publisher: string | null; is_official: number }>()).results;
+  const have = await env.DB.prepare('SELECT COUNT(*) AS n FROM item_images WHERE item_id=?').bind(itemId).first<{ n: number }>();
+  const cands: Candidate[] = [];
+  for (const s of srcs.slice(0, 3)) {
+    for (const u of await pageImages(s.url, 2)) cands.push({ url: u, credit: `${s.is_official ? '官方素材' : '報導配圖'} · ${s.publisher ?? ''}`.replace(/ · $/, ''), official: !!s.is_official, page: s.url });
+    if (cands.length >= 3) break;
+  }
+  if (!cands.length) return 0;
+  const base = have?.n ?? 0;
+  const stored = await storeImages(env, `${itemId}/r${Date.now().toString(36)}`, cands, 3 - Math.min(base, 2));
+  if (!stored.length) return 0;
+  await env.DB.batch(stored.map((im, i) => env.DB.prepare(
+    'INSERT OR IGNORE INTO item_images (item_id,kv_key,content_type,bytes,width,height,source_url,page_url,credit,is_official,sort) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(itemId, im.kv_key, im.content_type, im.bytes, im.width, im.height, im.source_url, im.page_url, im.credit, im.is_official, base + i + 1)));
+  return stored.length;
 }

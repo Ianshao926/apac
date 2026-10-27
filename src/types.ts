@@ -67,6 +67,8 @@ export interface ItemImage {
   kv_key: string;
   content_type: string;
   bytes: number;
+  width: number | null;
+  height: number | null;
   source_url: string;
   page_url: string | null;
   credit: string;

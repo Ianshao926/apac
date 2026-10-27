@@ -41,6 +41,11 @@ export function pickLead(items: Item[], images: Record<string, ItemImage[]>): It
 const maxBytes = (ims: ItemImage[] | undefined) => (ims ?? []).reduce((m, x) => Math.max(m, x.bytes || 0), 0);
 /** 同一則動態的圖,檔案最大的(通常解析度最高)排第一,用在大版位 */
 function bySize(ims: ItemImage[] | undefined): ItemImage[] { return (ims ?? []).slice().sort((a, b) => (b.bytes || 0) - (a.bytes || 0) || a.sort - b.sort); }
+/** 封面用的圖:直式或方形優先(封面是 3:4 的直框),再比檔案大小 */
+const isPortrait = (im: ItemImage) => !!im.width && !!im.height && im.height >= im.width * 0.95;
+function coverPick(ims: ItemImage[] | undefined): ItemImage | undefined {
+  return bySize(ims).sort((a, b) => Number(isPortrait(b)) - Number(isPortrait(a)))[0];
+}
 
 // ---------- 樣式 ----------
 const CSS = `
@@ -70,6 +75,7 @@ a:focus-visible,button:focus-visible,select:focus-visible{outline:1px solid curr
 .cover .m{position:absolute;z-index:1;top:7%;left:0;right:0;text-align:center;font-size:clamp(17px,1.9vw,25px);letter-spacing:.2em;line-height:1;white-space:nowrap}
 .cover .c{position:absolute;z-index:1;left:7%;right:7%;bottom:6%;font-size:12.5px;line-height:1.35;text-align:left}.cover .c b{display:block;font-weight:400;text-transform:uppercase}
 .cover .w{position:absolute;z-index:1;right:7%;bottom:6%;font-size:clamp(40px,5vw,64px);line-height:.8}
+.cover.img:has(img.lo){color:#000}.cover.img:has(img.lo)::after{display:none}
 .duo{display:flex;justify-content:center;align-items:center;gap:16px;margin:44px 0 0;font-family:var(--sans);font-size:15px}.duo i{width:1px;height:16px;background:var(--ink)}.duo a:hover{color:var(--mute)}
 .hero{position:relative;margin-top:44px;height:min(88vh,800px);min-height:480px;overflow:hidden;background:#1b1b1b;color:#fff}
 .hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -90,6 +96,7 @@ a:focus-visible,button:focus-visible,select:focus-visible{outline:1px solid curr
 .mk,.mkM,.mkL{flex:none;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--hair)}.mk{width:20px;height:20px}.mkM{width:52px;height:52px}.mkL{display:block;width:112px;height:112px;margin:0 auto 32px}
 .mk.t,.mkM.t,.mkL.t{display:grid;place-items:center;background:#000;color:#fff;box-shadow:none;font-family:var(--serif);line-height:1}.mk.t{font-size:12px}.mkM.t{font-size:28px}.mkL.t{font-size:60px}
 .mono{position:absolute;inset:0;display:grid;place-items:center;background:#000;color:#fff;font-family:var(--serif);font-size:clamp(120px,13vw,220px);line-height:1}
+.mono.lg{background:var(--sage)}.mono.lg img{width:36%;max-width:132px;aspect-ratio:1;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--hair)}
 .feat{text-align:center;padding:clamp(104px,10vw,170px) var(--g) 0}
 .feat .k{display:block;font-family:var(--serif);font-size:clamp(28px,3.1vw,46px);line-height:1.08;text-transform:uppercase;margin-bottom:14px}
 .feat h2{font-family:var(--zh);font-size:clamp(22px,2.5vw,34px);line-height:1.55;max-width:26em;margin:0 auto}
@@ -178,7 +185,7 @@ img.lo{object-fit:scale-down!important;background:var(--sage)}.hero>img.lo{backg
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;600&display=swap';
 const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>';
-const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});function fit(i){if(!i.naturalWidth)return;var r=i.getBoundingClientRect();if(i.naturalWidth<r.width*.9||i.naturalHeight<r.height*.9)i.classList.add('lo')}document.querySelectorAll('img[data-fit]').forEach(function(i){if(i.complete)fit(i);else i.addEventListener('load',function(){fit(i)})});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
+const SCRIPT = `<script>(function(){var m=document.getElementById('menu');document.querySelectorAll('[data-menu]').forEach(function(b){b.addEventListener('click',function(){var o=!m.classList.contains('open');m.classList.toggle('open',o);document.body.style.overflow=o?'hidden':'';var f=m.querySelector(o?'nav a':null);if(f)f.focus()})});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')){m.classList.remove('open');document.body.style.overflow=''}});function fit(i){if(!i.naturalWidth)return;var r=i.getBoundingClientRect();var low=i.naturalWidth<r.width*.9||i.naturalHeight<r.height*.9;var wide=i.naturalWidth>i.naturalHeight*1.15&&r.height>r.width*1.05;if(low||wide)i.classList.add('lo')}document.querySelectorAll('img[data-fit]').forEach(function(i){if(i.complete)fit(i);else i.addEventListener('load',function(){fit(i)})});document.querySelectorAll('select[data-go]').forEach(function(s){s.addEventListener('change',function(){if(s.value)location.href=s.value})})})();</script>`;
 
 // ---------- 外框 ----------
 function page(s: Site, o: { title: string; body: string; draft?: string | null; desc?: string }): string {
@@ -211,6 +218,10 @@ const ctxOf = (s: Site, brands: Brand[], images: Record<string, ItemImage[]>): C
 const storyHref = (c: Ctx, it: Item) => c.s.link(`/s/${it.id}`);
 const imgSrc = (im: ItemImage) => `/img/${im.kv_key.replace(/^img\//, '')}`;
 const initial = (c: Ctx, it: Item) => (enName(c.brands.get(it.brand_id), it.brand_id).trim()[0] ?? '·').toUpperCase();
+/** 沒有圖的版位:有 logo 的品牌放 logo,沒有的放品牌首字母 */
+const placeholder = (c: Ctx, it: Item) => LOGO_IDS.has(it.brand_id)
+  ? `<span class="mono lg" aria-hidden="true"><img src="/logo/${esc(it.brand_id)}.png" alt="" loading="lazy" decoding="async"></span>`
+  : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
 
 /** 品牌標誌:有 logo 用 logo,沒有就用黑底首字母方塊 */
 function mark(id: string, b: Brand | undefined, cls: 'mk' | 'mkM' | 'mkL') {
@@ -221,7 +232,7 @@ function mark(id: string, b: Brand | undefined, cls: 'mk' | 'mkM' | 'mkL') {
 
 function picture(c: Ctx, it: Item, eager = false) {
   const im = bySize(c.images[it.id])[0];
-  return im ? `<img data-fit src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="mono" aria-hidden="true">${esc(initial(c, it))}</span>`;
+  return im ? `<img data-fit src="${esc(imgSrc(im))}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : placeholder(c, it);
 }
 
 /** 圖卡。issue:同一期裡,標籤寫品牌;cross:跨期,標籤寫第幾週 */
@@ -259,7 +270,7 @@ export function renderHome(b: IssueBundle, s: Site, issues: IssueSummary[]): str
   const anchor = (it: Item) => `${issueHref}#${it.id}`;
   const lead = pickLead(items, b.images);
   const active = new Set(items.map(i => i.brand_id)).size;
-  const coverKey = bySize(items.filter(i => i !== lead).flatMap(i => b.images[i.id] ?? []))[0]?.kv_key ?? (lead ? bySize(b.images[lead.id])[0]?.kv_key ?? null : null);
+  const coverKey = coverPick(items.filter(i => i !== lead).flatMap(i => b.images[i.id] ?? []))?.kv_key ?? (lead ? coverPick(b.images[lead.id])?.kv_key ?? null : null);
 
   const head = `<section class="ihead"><h1>Issue ${esc(pad2(issue.no))}<br>${esc(wlabel(issue.week))}</h1>
 <p class="lb">${esc(rangeLong(issue.range_start, issue.range_end))} · ${items.length} stories from ${active} brands</p>
@@ -448,7 +459,7 @@ export function renderStory(b: IssueBundle, it: Item, s: Site): string {
   const n = name.length;
   const fs = n <= 6 ? 'clamp(68px,9vw,140px)' : n <= 10 ? 'clamp(58px,7vw,112px)' : 'clamp(44px,5.2vw,84px)';
   const first = imgs[0];
-  const left = first ? `<a href="${esc(imgSrc(first))}" target="_blank" rel="noopener" class="im"><img data-fit src="${esc(imgSrc(first))}" alt="${esc(it.title)}" loading="eager"></a>` : `<div class="im"><span class="mono" aria-hidden="true">${esc(initial(c, it))}</span></div>`;
+  const left = first ? `<a href="${esc(imgSrc(first))}" target="_blank" rel="noopener" class="im"><img data-fit src="${esc(imgSrc(first))}" alt="${esc(it.title)}" loading="eager"></a>` : `<div class="im">${placeholder(c, it)}</div>`;
   const verified = it.confidence === 'verified';
   const others = b.items.filter(x => x.id !== it.id).sort((x, y) => (+(y.category === it.category) - +(x.category === it.category)) || ((b.images[x.id]?.length ? 0 : 100) + x.rank) - ((b.images[y.id]?.length ? 0 : 100) + y.rank)).slice(0, 3);
 

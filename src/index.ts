@@ -1,11 +1,12 @@
 import { CATEGORIES, type Brand, type Env, type Item } from './types';
 import { targetWeekFor, parseWeekId } from './week';
-import { allBrands, brandStats, claimRun, ensureIssue, getIssue, listIssues, loadBundle, loadItems, pendingBrands, recordRun, saveReport, weekOfItem } from './db';
+import { allBrands, brandStats, claimRun, ensureIssue, getIssue, listIssues, loadBundle, loadItems, pendingBrands, recentTitles, recordRun, refetchImages, saveReport, weekOfItem } from './db';
 import { researchBrand } from './research';
 import { renderArchive, renderBrand, renderBrands, renderEmpty, renderHome, renderIssue, renderIssueStories, renderStories, renderStory, type Site } from './render';
 import { renderBanner } from './banner';
 import { buildCard, postToTeams } from './card';
 import { LOGOS } from './logos';
+import { imageSize } from './images';
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const html = (s: string, status = 200) => new Response(s, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
@@ -29,7 +30,7 @@ async function runOneBrand(env: Env, week: string, brandId?: string) {
   if (!brand) return { week, done: true, message: brandId ? 'unknown brand' : 'nothing pending' };
   const t0 = Date.now();
   try {
-    const r = await researchBrand(env, brand, week, issue.range_start, issue.range_end);
+    const r = await researchBrand(env, brand, week, issue.range_start, issue.range_end, await recentTitles(env, brand.id, week));
     const stats = await saveReport(env, week, brand, r.report);
     await recordRun(env, week, brand.id, r.report.items.length ? 'ok' : 'quiet', { items: stats.inserted, input: r.usage.input, output: r.usage.output, searches: r.usage.searches, cache_read: r.usage.cache_read, cache_write: r.usage.cache_write });
     return { week, brand: brand.id, status: r.report.items.length ? 'ok' : 'quiet', found: r.report.items.length, ...stats, quiet_reason: r.report.quiet_reason, usage: r.usage, model: r.model, ms: Date.now() - t0, remaining: pending.filter(p => p.id !== brand.id).length };
@@ -174,6 +175,24 @@ export default {
         if (!id) return json({ error: 'item required' }, 400);
         await env.DB.prepare('UPDATE items SET hidden=? WHERE id=?').bind(on ? 1 : 0, id).run();
         return json({ ok: true, item: id, hidden: on });
+      }
+      if (path === '/admin/measure') {
+        // 補量舊圖的寬高(一次最多 40 張,子請求有上限)
+        const rows = (await env.DB.prepare('SELECT id, kv_key, content_type FROM item_images WHERE width IS NULL LIMIT 40').all<{ id: number; kv_key: string; content_type: string }>()).results;
+        let measured = 0;
+        for (const r of rows) {
+          const buf = await env.IMG.get(r.kv_key, 'arrayBuffer');
+          const d = buf ? imageSize(buf, r.content_type) : null;
+          await env.DB.prepare('UPDATE item_images SET width=?, height=? WHERE id=?').bind(d?.w ?? 0, d?.h ?? 0, r.id).run();
+          if (d) measured++;
+        }
+        const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM item_images WHERE width IS NULL').first<{ n: number }>();
+        return json({ measured, tried: rows.length, remaining: left?.n ?? 0 });
+      }
+      if (path === '/admin/refetch-images') {
+        const id = url.searchParams.get('item');
+        if (!id) return json({ error: 'item required' }, 400);
+        return json({ item: id, added: await refetchImages(env, id) });
       }
       if (path === '/admin/reset-run') {
         const brand = url.searchParams.get('brand');

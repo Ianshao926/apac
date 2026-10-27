@@ -29,7 +29,7 @@ export interface ResearchResult {
   model: string;
 }
 
-export async function researchBrand(env: Env, brand: Brand, week: string, start: string, end: string): Promise<ResearchResult> {
+export async function researchBrand(env: Env, brand: Brand, week: string, start: string, end: string, prevTitles: string[] = []): Promise<ResearchResult> {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 9 * 60 * 1000 });
   const markets: string[] = JSON.parse(brand.markets);
   const domains: string[] = JSON.parse(brand.domains);
@@ -40,7 +40,7 @@ export async function researchBrand(env: Env, brand: Brand, week: string, start:
 搜尋重點:${brand.focus}
 官方網域提示:${domains.join('、')}
 指定週:${week},${start} 至 ${end}(週一至週日)。今天是 ${today}。
-
+${prevTitles.length ? `\n前兩期已經收錄過(同一件事不要再收;只有本週有明確新進展時才收,而且標題要寫出新進展,不是重講原本的事):\n${prevTitles.map(t => '- ' + t).join('\n')}\n` : ''}
 請用多種語言與關鍵字搜尋(品牌中英文名 + 新品 / new / launch / promo / 會員 / loyalty / app / 聯名 / collab,以及各市場當地語言),必要時抓取官方頁面確認。
 找到候選後逐一確認日期與來源,最後只輸出符合紀律的條目。`;
 
